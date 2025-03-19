@@ -1,0 +1,39 @@
+Struttura CORE 
+|-- versioni/
+|   |-- v1.0/
+|   |   |-- codici_attività/
+|   |   |   |-- ATT_XXXXX/  # Cartelle per codici attività specifici
+|   |   |-- tabelle/
+|   |   |   |-- ATB_XXXXX/  # Definizione della tabella
+|   |   |   |-- TAB_XXXXX/  # Contenuto della tabella
+|   |   |-- schermate/
+|   |   |   |-- SCR_XXXXX/  # Codice della schermata specifica
+|   |   |-- finestre/
+|   |   |   |-- WDW_XXXXX/  # Definizione delle finestre
+|   |   |-- oggetti/
+|   |   |   |-- OBJ_XXXXX/  # Definizione degli oggetti
+|   |   |-- script/
+|   |   |   |-- PATCH_XXXXX/  # Script di patch personalizzati
+|   |   |-- report/
+|   |   |   |-- REP_XXXXX/  # Definizione dei report
+|   |   |-- documentazione/
+|   |   |   |-- DOC_XXXXX/  # File di documentazione
+|   |-- v1.1/
+|   |   |-- ... (struttura simile a v1.0)
+|   |-- v2.0/
+|   |   |-- ... (struttura simile a v1.0)
+|
+|-- script_utilità/
+|   |-- validazione/
+|   |   |-- script_validazione_patch.sh  # Script per validare patch applicate
+|   |-- integrazione/
+|   |   |-- script_integrazione_patch.sh  # Script per l'integrazione delle patch
+|   |-- backup/
+|   |   |-- script_backup.sh  # Script per il backup delle cartelle
+|
+|-- documentazione/
+|   |-- guida_creazione_patch.md  # Guida su come creare una patch
+|   |-- guida_integrazione_patch.md  # Guida su come integrare una patch
+|   |-- best_practices.md  # Linee guida per le best practices di sviluppo e patch
+|
+|-- README.md

@@ -1,0 +1,1 @@
+Nel core terremo la pathc con tutti le funzionalità, ma salveremo nella repo del cliente, sempre versionandole, le patch con ogni versione rilasciatogli

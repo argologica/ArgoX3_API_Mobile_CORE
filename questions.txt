@@ -1,0 +1,1 @@
+capire con fede come gestire le funzioni fatte nel cloud, fare in modo di creare un meccanismo di selezione degli elementi di quest'ultime, in fase di creazione della patch

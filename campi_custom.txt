@@ -1,0 +1,8 @@
+YVISBLOC: campo array per la visualizzazione dei blocchi
+YSCANMODE: campo tipo MENU LOCALE CUSTOM con 4 valori per la gestione di qr e barcode (DA IMPLEMENTARE)
+
+qrcode | barcode
+  0	    0 //nessuno
+  0	    1 //solo bar
+  1	    0 //solo qr
+  1	    1 //BOTH
