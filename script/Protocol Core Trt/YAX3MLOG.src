@@ -1,0 +1,190 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+##################################################################################################################
+#                                                 LIBRERIA PER GESTIONE LOG AX3M
+##################################################################################################################
+#**
+#* Init del Log: 1-Creazione (eventuale) ambiente per il Log; 2-Composizione Intestazione;
+#* 3-Stampa Log ; 4-Stampe : yax3mresp.json, init-fields.txt
+#*!
+
+$YAX3MOB_INIT
+
+  Gosub YAX3MOB_SET_ENV       #1-LOG ENVIRONMENT
+  Gosub YAX3MOB_SET_HEADER    #2-COMPOSIZIONE INTESTAZIONE
+  # Gosub YAX3MOB_SET_HEADERLOG From YAX3MUTILS_BETA
+
+  #3-STAMPA:(yutils)
+  Call YWRITE(YLOGTEXT)
+  Raz YLOGTEXT
+
+  #4-LOG- STAMPE in INIT -lato Mobile
+  If([V]GWEBSERV)
+    #Stampa: yax3mresp.json
+    Call YPRINT_DIR_CLB(YLOGDIRNAME, YAX3MRESP, "YAX3MRESP_" + YACTION, "json") From YUTILS
+
+    #Stampa: init-fields.txt
+    If(CURRENTROW = -1)
+      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "init", YFIELDS, YACTION, YCURRENTUSER) From YAX3MUTILS
+    Else
+      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "init", YFIELDS, YACTION-"-row"+num$(CURRENTROW),YCURRENTUSER) From YAX3MUTILS
+    Endif
+  Endif
+Return
+
+#########################################################################################################
+#**
+#* Sub per Creazione (eventuale) Ambiente per il Log
+#*!
+
+$YAX3MOB_SET_ENV
+
+  Local Clbfile YLOGTEXT(2)                                                 #Clob per LOG
+  Local Char YLOGDIRNAME(20): YLOGDIRNAME = "ArgoX3Mobile_Log"              #Nome cartella Log per AX3M #!! --> PARAMETRO GENERALE su X3Cloud
+  Local Char YLOGFIL(25): YLOGFIL = "AX3M_Log_"+format$("D:YYYYMMDD",date$) #Nome File Log
+  #Local Char YLOGDIRPATH(250)
+  Local Integer YLOGDIR_EXIST,YI,YJ
+  Local Char YFILA(250)
+  Local Char YLOG_EXT(6): YLOG_EXT = "log"
+  Local Char YBASEPATH(250):YBASEPATH = filpath("","","")
+  Local Char YIDENT(30): YIDENT = num$(adxuid(1))
+
+  #variabili per parametri azione
+  Local Char YPARAM(50),YPARVAL(60)
+  If clalev([F:YATR])=0 : Local File ACTPAR [F:YATR] : Endif
+  Local Char YEXCLUDE_PARAMS(20)(3)   #array con codici dei parametri da escludere
+  YEXCLUDE_PARAMS(0)="YAX3MRESP"
+  YEXCLUDE_PARAMS(1)="YRESPONSE"
+  YEXCLUDE_PARAMS(2)="RESPONSE"
+
+  #1-CREAZIONE eventuale CRT/FILE di LOG
+  Local Char YLOGPATH(250): YLOGPATH = YBASEPATH+"\"+YLOGDIRNAME     #Percorso per cartella Log AX3M
+  Local Char YAX3MLOG_FILPATH(250): YAX3MLOG_FILPATH = YLOGPATH+"\"+YLOGFIL
+  YLOGDIR_EXIST = filinfo(YLOGPATH,7) #controllo se esiste la crt
+
+  #se non esiste la crt per Log, la creo
+  If(YLOGDIR_EXIST < 0)
+    Call YCREATE_DIRECTORY(YBASEPATH,YLOGDIRNAME) From YUTILS
+  Endif
+  #Call YCREATE_DIRECTORY(YBASEPATH,"AA") From YUTILS
+
+  YFILA=filpath(YLOGDIRNAME, YLOGFIL, YLOG_EXT)  #gestione file
+Return
+
+##############################################################################################################
+#**
+#* Sub per Intestazione Log per Az.Campo e Az.Bottone Finestra. Struttura : Timestamp-Identificativo-Testo ;
+#* Operazioni : 1-Cod.Azione(WS), 2-Set dei parametri, 3- Cod.Utente
+#*!
+
+$YAX3MOB_SET_HEADER
+
+  Append YLOGTEXT, chr$(10)  # una riga vuota tra un'azione e l'altra
+  Append YLOGTEXT, func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-"ACTION:"- func YAX3MUTILS.YGET_SUBPRGNAME(YACTION)+chr$(10)
+  Append YLOGTEXT, func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-"PARAMS:"
+
+  #Filtro i parametri dell'azione
+  Local Integer YNUMPAR,YPOS,YDIME
+  Columns [F:YATR] (CODPAR)
+  Filter [F:YATR] Where ([F:YATR]ACTION = YACTION & !find([F:YATR]CODPAR,YEXCLUDE_PARAMS))
+  YNUMPAR = rowcount([F:YATR])
+
+  For [F:YATR]
+    YPARAM = evalue("[F:YATR]CODPAR")    #codice parametro
+    YDIME = func YAX3MUTILS.YGET_DIME(func YAX3MUTILS.YGET_SUBPRGNAME(YACTION),YPARAM)
+    YPOS = func YUTILS.IIF(CURRENTROW = -1, 0, CURRENTROW)
+
+    If(YDIME=1)
+      YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM))) #val param
+    Else
+      If(YPARAM = YCURRFIELD)
+        If(!GWEBSERV)
+          YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(0)+")")))
+        Else
+          YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(YPOS)+")")))
+        Endif
+      Else
+        YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(YPOS)+")")))
+      Endif
+    Endif
+
+    Append YLOGTEXT,func YUTILS.STR_IIF(YI>0, chr$(32), AVOID.ACHAR)-YPARAM+":"-YPARVAL-func YUTILS.STR_IIF(YI<YNUMPAR,"-",AVOID.ACHAR)
+    YI +=1
+  Next
+  Filter [F:YATR]
+
+  Append YLOGTEXT, chr$(10)
+  Append YLOGTEXT, func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-"USER:"-YCURRENTUSER
+
+Return
+
+##################################################################################################
+#**
+#* Sub per Gestione Log a fine Azione-Campo: (Mobile): stampa YFields_end.txt, stampa YResponse_end.json
+#*!
+
+$YAX3MOB_END
+
+  If(GWEBSERV)
+    #LOGGING(STAMPE): print end matrix: YFIELDS_end + print YRESPONSE
+    If(CURRENTROW = -1)
+      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "end", YFIELDS, YACTION, YCURRENTUSER) From YAX3MUTILS
+      Call YPRINT_DIR_CLB(YLOGDIRNAME, YRESPONSE, "YRESPONSE_" + YACTION +"_("+YCURRENTUSER+")", "json") From YUTILS
+    Else
+      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "end", YFIELDS, YACTION-"-row"+num$(CURRENTROW),YCURRENTUSER) From YAX3MUTILS
+      Call YPRINT_DIR_CLB(YLOGDIRNAME, YRESPONSE, "YRESPONSE_" + YACTION-"-row"+num$(CURRENTROW)+"_("+YCURRENTUSER+")", "json") From YUTILS
+    Endif
+  Endif
+
+  Raz YLOGTEXT
+Return
+
+############################################################################################
+#**
+#* Metodo per Loggare un testo
+#*
+#* @param YMKSTAT Intero(booleano) per stato
+#* @param YMESSAGE Messaggio da loggare
+#*!
+
+Subprog YAX3MOB_ECRTRACE(YMKSTAT,YMESSAGE)
+
+  Value Integer YMKSTAT
+  Value Char YMESSAGE
+
+  Local Char YTYPELOG(10)
+#TODO:metti come parametro generale : "ArgoX3Mobile_Log"
+  Local Char YFILA(250) : YFILA = filpath("ArgoX3Mobile_Log","AX3M_Log_"+format$("D:YYYYMMDD",date$),"log")
+  Local Char YIDENT(30): YIDENT = num$(adxuid(1))
+  Local Clbfile YMESS
+
+  Case YMKSTAT
+    When 0 : YTYPELOG = "INFO"
+    When 1 : YTYPELOG = "WARN"
+    When 2 : YTYPELOG = "ERROR"
+    When 4 : YTYPELOG = "FATAL"
+    When Default
+  Endcase
+
+  YMESS = func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-YTYPELOG+":"-YMESSAGE
+  Call YWRITE(YMESS)
+End
+
+#########################################################################################
+#**
+#* Scrittura effettiva del Messaggio nel file di Log
+#*
+#* @param YMESSAGE Messaggio da tracciare
+#*!
+
+Subprog YWRITE(YMESSAGE)
+
+  Value Clbfile YMESSAGE
+  Local Char YFILA(250) : YFILA = filpath("ArgoX3Mobile_Log","AX3M_Log_"+format$("D:YYYYMMDD",date$),"log")
+
+  Openo YFILA Using [YF1]
+  Iomode adxifs ";" Using [YF1]
+  Iomode adxium GUTF8 Using [YF1]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF1]
+  Wrseq YMESSAGE Using [YF1]
+  Openo Using [YF1]
+End

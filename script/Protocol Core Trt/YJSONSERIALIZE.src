@@ -1,0 +1,719 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+##Caratteri json
+Funprog GET_OPENCURLYBRACKET()
+End chr$(123) #{
+
+Funprog GET_CLOSECURLYBRACKET()
+End chr$(125) #}
+
+Funprog GET_OPENSQUAREBRACKET()
+End chr$(91) #[
+
+Funprog GET_CLOSESQUAREBRACKET()
+End chr$(93) #]
+
+Funprog GET_SEPARATOR() #,
+End chr$(44)
+
+Funprog GET_COLON() #:
+End chr$(58)
+##fine caratteri json
+
+##Funzioni di utilità
+Funprog GET_OPENCURLYBRACKET_ARRAY() #: [
+End + chr$(58) + chr$(32) + chr$(91)
+
+Funprog GET_OPENSQUAREBRACKET_KEY(YKEY)
+  Value Char YKEY
+End func GET_STRVALUE(YKEY) + func GET_OPENCURLYBRACKET_ARRAY()
+
+Funprog GET_KEY(YKEY)
+  Value Char YKEY
+End chr$(34) + YKEY + chr$(34) + chr$(58) + chr$(32) # "YKEY":
+
+Funprog GET_STRVALUE(YVALUE)
+  Value Char YVALUE
+End chr$(34) + escJson(YVALUE) + chr$(34) #"YVALUE"
+
+
+
+#Fine funzioni utilita
+
+#chiave valore
+
+#**
+#* Return YKEY: YVALUE (intero)
+#*
+#* @param YKEY Chiave
+#* @param YVALUE Valore (tipo intero)
+#* @param WITHSEP booleano per inserimento separatore (= 0 : inserimento separatore, =1 : no inserimento)
+#*!
+Funprog GET_INT(YKEY, YVALUE, WITHSEP)
+  Value Char YKEY
+  Value Integer YVALUE
+  Value Integer WITHSEP
+  Local Char YRESULT(250)
+
+  YRESULT = func GET_KEY(YKEY) +  num$(YVALUE)
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+#chiave valore
+#**
+#* Return YKEY: YVALUE (decimale)
+#*
+#* @param YKEY Chiave
+#* @param YVALUE Valore (tipo decimale)
+#* @param WITHSEP booleano per inserimento separatore (= 0 : inserimento separatore, =1 : no inserimento)
+#*!
+Funprog GET_DECIMAL(YKEY, YVALUE, WITHSEP)
+  Value Char YKEY
+  Value Decimal YVALUE
+  Value Integer WITHSEP
+  Local Char YRESULT(250)
+
+  YRESULT = func GET_KEY(YKEY) +  num$(YVALUE)
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+#**
+#* Return YKEY: YVALUE (booleano)
+#*
+#* @param YKEY Chiave
+#* @param YVALUE Valore (tipo intero visto come booleano) (1--> true, 0 --> false)
+#* @param WITHSEP booleano per inserimento separatore (= 0 : inserimento separatore, =1 : no inserimento)
+#*!
+Funprog GET_BOOL(YKEY, YVALUE, WITHSEP)
+  Value Char YKEY
+  Value Integer YVALUE
+  Value Integer WITHSEP
+  Local Char YRESULT(250)
+
+  YRESULT = func GET_KEY(YKEY) + func YUTILS.IIF(YVALUE = 1, "true", "false")
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+#**
+#* Return YKEY: YVALUE (stringa)
+#*
+#* @param YKEY Chiave
+#* @param YVALUE Valore (tipo stringa)
+#* @param WITHSEP booleano per inserimento separatore (= 0 : inserimento separatore, =1 : no inserimento)
+#*!
+Funprog GET_STR(YKEY, YVALUE, WITHSEP)
+  Value Char YKEY
+  Value Char YVALUE
+  Value Integer WITHSEP
+  Local Char YRESULT(250)
+
+  YRESULT = func GET_KEY(YKEY) + func GET_STRVALUE(YVALUE)
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+#Uguale a GET_STR ma restituisce una stringa con len > 250
+#**
+#* Return YKEY: YVALUE (stringa len >250)
+#*
+#* @param YKEY Chiave
+#* @param YVALUE Valore (tipo stringa len >250)
+#* @param WITHSEP booleano per inserimento separatore (= 0 : inserimento separatore, =1 : no inserimento)
+#*!
+Funprog GET_CLB(YKEY, YVALUE, WITHSEP)
+  Value Char YKEY
+  Value Char YVALUE
+  Value Integer WITHSEP
+  Local Clbfile YRESULT(250)
+#TODO: sistema clbfile YRESULT(250)
+  YRESULT = func GET_KEY(YKEY) + func GET_STRVALUE(YVALUE)
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+#**
+#* Return YKEY: null
+#*
+#* @param YKEY Chiave
+#* @param WITHSEP booleano per inserimento separatore (= 0 : inserimento separatore, =1 : no inserimento)
+#*!
+Funprog GET_NULL(YKEY, WITHSEP)
+  Value Char YKEY
+  Value Integer WITHSEP
+  Local Char YRESULT(250)
+
+  YRESULT = func GET_KEY(YKEY) + "null"
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+#fine chiave valore
+
+##liste
+Funprog GET_STRLST(YKEY, YARRAY, WITHSEP)
+  Value Char YKEY
+  Value Char YARRAY()()
+  Value Integer WITHSEP
+  Local Clbfile YRESULT(250)
+
+  YRESULT = func GET_KEY(YKEY) + func GET_OPENSQUAREBRACKET() #[
+  Local Integer I, ARRAY_SIZE : ARRAY_SIZE = func YUTILS.COUNT(YARRAY) - 1
+  For I=0 To ARRAY_SIZE
+    YRESULT += func GET_STRVALUE(YARRAY(I))
+    If I < ARRAY_SIZE
+      YRESULT += func GET_SEPARATOR() #,
+    Else
+      YRESULT += func GET_CLOSESQUAREBRACKET() #]
+    Endif
+  Next
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+Funprog GET_INTLST(YKEY, YARRAY, WITHSEP)
+  Value Char YKEY
+  Value Integer YARRAY()
+  Value Integer WITHSEP
+  Local Clbfile YRESULT(250)
+
+  YRESULT = func GET_KEY(YKEY) + func GET_OPENSQUAREBRACKET() #[
+  Local Integer I
+  For I=0 To dim(YARRAY) - 1
+    YRESULT += YARRAY(I)
+    If I < dim(YARRAY) - 1
+      YRESULT += func GET_SEPARATOR() #,
+    Endif
+  Next
+  YRESULT += func GET_CLOSESQUAREBRACKET() #]
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR() #,
+  Endif
+
+End YRESULT
+##fine liste
+
+##oggetto
+Funprog GET_STROBJ(YKEY, YARRAY, WITHKEY, WITHSEP)
+  Value Char YKEY
+  Value Char YARRAY()()
+  Value Integer WITHKEY
+  Value Integer WITHSEP
+  Local Integer I, LAST_NON_EMPTY
+  Local Char YRESULT(250)
+
+  Local Integer ARRAY_SIZE : ARRAY_SIZE = func YUTILS.COUNT(YARRAY) - 1
+  #se si crea un oggetto senza chiave, lo si utilizza solo come item di un array
+  YRESULT = func YUTILS.IIF(WITHKEY = 0, func GET_KEY(YKEY) + func GET_OPENCURLYBRACKET(), func GET_OPENCURLYBRACKET())
+  For I = 0 To ARRAY_SIZE
+    Append YRESULT, YARRAY(I)
+    If I < ARRAY_SIZE
+      Append YRESULT, func GET_SEPARATOR() #,
+    Endif
+  Next I
+  Append YRESULT, func GET_CLOSECURLYBRACKET
+  If WITHSEP = 0
+    Append YRESULT, func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+##oggetto
+Funprog GET_CLBOBJ(YKEY, YARRAY, WITHKEY, WITHSEP)
+  Value Char YKEY
+  Value Clbfile YARRAY()()
+  Value Integer WITHKEY
+  Value Integer WITHSEP
+  Local Integer I
+  Local Clbfile YRESULT
+
+  #se si crea un oggetto senza chiave, lo si utilizza solo come item di un array
+  Gosub CREATE_CLBOBJ
+End YRESULT
+
+Funprog GET_CLBOBJ_FROM_STRARRAY(YKEY, YARRAY, WITHKEY, WITHSEP)
+  Value Char YKEY
+  Value Char YARRAY()
+  Value Integer WITHKEY
+  Value Integer WITHSEP
+  Local Integer I
+  Local Clbfile YRESULT
+
+  #se si crea un oggetto senza chiave, lo si utilizza solo come item di un array
+  Gosub CREATE_CLBOBJ
+End YRESULT
+
+$CREATE_CLBOBJ
+
+  YRESULT = func YUTILS.IIF(WITHKEY = 0, func GET_KEY(YKEY) + func GET_OPENCURLYBRACKET(), func GET_OPENCURLYBRACKET())
+  Local Integer ARRAY_SIZE : ARRAY_SIZE = func YUTILS.COUNT(YARRAY) - 1
+  For I = 0 To ARRAY_SIZE
+    Append YRESULT, YARRAY(I)
+    If I < ARRAY_SIZE
+      Append YRESULT, func GET_SEPARATOR() #,
+    Endif
+  Next I
+  Append YRESULT, func GET_CLOSECURLYBRACKET
+  If WITHSEP = 0
+    Append YRESULT, func GET_SEPARATOR()
+  Endif
+
+Return
+
+##array
+Funprog GET_STRARRAY(YKEY, YARRAY, WITHSEP)
+  Value Char YKEY
+  Value Char YARRAY()(,)
+  Value Integer WITHSEP
+
+  Local Char YRESULT (250)
+
+  YRESULT = func GET_STRVALUE(YKEY) + func GET_OPENCURLYBRACKET_ARRAY() #"YKEY": [
+  Local Integer I, J
+
+  For I = 0 To dim(YARRAY, 1) - 1
+    YRESULT += func GET_OPENCURLYBRACKET()
+    For J = 0 To dim(YARRAY, 2) - 1
+      YRESULT+=YARRAY(I, J)
+    Next J
+    YRESULT += func GET_CLOSECURLYBRACKET()
+    If(I < dim(YARRAY, 1) - 1)
+      YRESULT += func GET_SEPARATOR() #,
+    Endif
+  Next I
+  YRESULT += func GET_CLOSESQUAREBRACKET() #]
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+Funprog GET_CLBARRAY(YKEY, YARRAY, WITHSEP)
+  Value Char YKEY
+  Value Char YARRAY()(,)
+  Value Integer WITHSEP
+
+  Local Clbfile YRESULT
+
+  YRESULT = func GET_STRVALUE(YKEY) + func GET_OPENCURLYBRACKET_ARRAY() #key:[
+  Local Integer I, J
+
+  For I = 0 To dim(YARRAY, 1) - 1
+    YRESULT += func GET_OPENCURLYBRACKET() #{
+    For J = 0 To dim(YARRAY, 2) - 1
+      YRESULT+=YARRAY(I, J)
+    Next J
+    YRESULT += func GET_CLOSECURLYBRACKET() #}
+    If(I < dim(YARRAY, 1) - 1)
+      YRESULT += func GET_SEPARATOR() #,
+    Endif
+  Next I
+
+  YRESULT += func GET_CLOSESQUAREBRACKET() #]
+  If WITHSEP = 0
+    YRESULT+= func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+Funprog GET_CLBARRAY_FROM_CLBARRAY(YKEY, YARRAY, WITHSEP)
+  Value Char YKEY
+  Value Clbfile YARRAY()()
+  Value Integer WITHSEP
+
+  Local Clbfile YRESULT(2)
+
+  If YKEY <> AVOID.ACHAR
+    YRESULT = func GET_STRVALUE(YKEY) + func GET_OPENCURLYBRACKET_ARRAY()
+  Else
+    YRESULT = func GET_OPENSQUAREBRACKET()
+  Endif
+
+  Local Integer I
+  Local Integer ARRAY_SIZE : ARRAY_SIZE = func YUTILS.COUNT(YARRAY) - 1
+
+  For I = 0 To ARRAY_SIZE
+    Append YRESULT, YARRAY(I)
+    If I < ARRAY_SIZE
+      If vireblc(YARRAY(I), 2) <> AVOID.ACHAR
+        Append YRESULT, func GET_SEPARATOR() #,
+      Endif
+    Endif
+  Next I
+
+  YRESULT += func GET_CLOSESQUAREBRACKET() #]
+
+  If WITHSEP = 0
+    YRESULT += func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+###############################
+Funprog GET_STRARRAY_FROM_STRARRAY(YKEY, YARRAY, WITHSEP)
+  Value Char YKEY
+  Value Char YARRAY()()
+  Value Integer WITHSEP
+
+  #Local Clbfile YRESULT(2)
+  Local Char YRESULT(250)
+
+  If YKEY <> AVOID.ACHAR
+    YRESULT = func GET_STRVALUE(YKEY) + func GET_OPENCURLYBRACKET_ARRAY()
+  Else
+    YRESULT = func GET_OPENSQUAREBRACKET()
+  Endif
+
+  Local Integer I
+  Local Integer ARRAY_SIZE : ARRAY_SIZE = func YUTILS.COUNT(YARRAY) - 1
+
+  For I = 0 To ARRAY_SIZE
+    YRESULT += YARRAY(I)
+    If I < ARRAY_SIZE
+      If vireblc(YARRAY(I), 2) <> AVOID.ACHAR
+        YRESULT += func GET_SEPARATOR() #,
+      Endif
+    Endif
+  Next I
+
+  YRESULT += func GET_CLOSESQUAREBRACKET() #]
+
+  If WITHSEP = 0
+    YRESULT += func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+##print
+Funprog GET_JSON(YJSON)
+  Value Clbfile YJSON
+  Local Clbfile YRESULT
+
+  YRESULT = func GET_OPENCURLYBRACKET()
+  YRESULT += YJSON
+  YRESULT += func GET_CLOSECURLYBRACKET()
+
+End YRESULT
+
+
+###################################################################################
+
+#Funprog per creare json con anche grid
+Funprog GENERATE_JSON(SUCCESS_VALUE, ALERT_TYPE, ALERT_MESSAGE, ALERT_WS, OPENFUNCTION, FIELDS, HEADER, DATA)
+  Value Integer SUCCESS_VALUE
+  Value Char ALERT_TYPE
+  Value Char ALERT_MESSAGE
+  Value Char ALERT_WS()(,)
+  Value Char OPENFUNCTION()
+  Value Char FIELDS()(,)
+  Value Char HEADER()(,)
+  Value Char DATA()(,)
+
+  Local Clbfile JSON_RESULT(14)
+
+  Append JSON_RESULT, func GET_OPENCURLYBRACKET()
+  #IL MKSTAT è GESTITO DIVERSAMENTE, SIAMO COSTRETTI a gestirlo con un ternario
+  Append JSON_RESULT, func GET_BOOL("success", func YUTILS.IIF(SUCCESS_VALUE = 0, 1, 0)  , 0)
+
+  Local Char ALERT_TOAST_TEXT(250)
+  Local Char ALERT_TOAST_ITEM(250)(2)
+  # qui ci sono tutte le azioni da mandare ad ax3m
+  Local Clbfile ACTION_ITEMS(1)(0..)
+  # si gestiscono più azioni per cui questo è l'indice corrente dell'array di clob contenente le azioni
+  Local Shortint ACTION_INDEX : ACTION_INDEX = -1
+
+  #ALERT E TOAST
+  If(find(ALERT_TYPE, "info", "warning", "confirm", "error") > 0)
+    ACTION_INDEX+=1
+    Local Char ALERT_DETAILS(250)(2)
+    ALERT_DETAILS(0) = func GET_STR("alertType", ALERT_TYPE, 1)
+    ALERT_DETAILS(1) = func GET_STR("message", ALERT_MESSAGE, 1)
+    Local Char ALERT_DETAILS_TEXT(250)
+    ALERT_DETAILS_TEXT = func GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+    ALERT_TOAST_ITEM(0) = func GET_STR("type","alert", 1)
+    ALERT_TOAST_ITEM(1) = ALERT_DETAILS_TEXT
+    ALERT_TOAST_TEXT = func GET_STROBJ(AVOID.ACHAR, ALERT_TOAST_ITEM, 1, 1)
+    ACTION_ITEMS(ACTION_INDEX) = ALERT_TOAST_TEXT
+
+  Elsif ALERT_TYPE = "toast"
+    ACTION_INDEX+=1
+    Local Char ALERT_DETAILS(250)(1)
+    ALERT_DETAILS(0) = func GET_STR("message", ALERT_MESSAGE,1)
+    Local Char ALERT_DETAILS_TEXT(250)
+    ALERT_DETAILS_TEXT = func GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+    ALERT_TOAST_ITEM(0) = func GET_STR("type", ALERT_TYPE, 1)
+    ALERT_TOAST_ITEM(1) = ALERT_DETAILS_TEXT
+    ALERT_TOAST_TEXT = func GET_STROBJ(AVOID.ACHAR, ALERT_TOAST_ITEM, 1, 1)
+    ACTION_ITEMS(ACTION_INDEX) = ALERT_TOAST_TEXT
+
+  Endif
+
+  #FIELDS
+  If(len(FIELDS) > 0)
+    Local Integer NB_DETAIL_FIELDS : NB_DETAIL_FIELDS = 0
+    Local Integer NB_GRID_FIELDS : NB_GRID_FIELDS = 0
+    Local Integer GRID_ROW_LENGTH : GRID_ROW_LENGTH = 0
+    Local Integer GRID_FIELD_FOUND : GRID_FIELD_FOUND = 0
+    Local Integer I
+    Local Char FIRST_GRID_FIELD(13)
+    Local Char TESTATA(1) : TESTATA = "0"
+    Local Char RIQUADRO(1) : RIQUADRO = "1"
+
+    ACTION_INDEX+=1
+    # First pass: Count detail fields and identify the length of a grid row
+    For I = 0 To dim(FIELDS, 1) - 1
+      If FIELDS(I, 8) <> RIQUADRO
+        NB_DETAIL_FIELDS = NB_DETAIL_FIELDS + 1
+      Else  # Grid field
+        If GRID_FIELD_FOUND = 0  # First grid field detection
+          FIRST_GRID_FIELD = FIELDS(I, 0)
+          GRID_FIELD_FOUND = 1
+        Endif
+        If FIELDS(I, 0) = FIRST_GRID_FIELD
+          GRID_ROW_LENGTH = GRID_ROW_LENGTH + 1
+        Endif
+        NB_GRID_FIELDS = NB_GRID_FIELDS + 1
+      Endif
+    Next
+
+    Local Char FIELD_ITEM(250)(7), FIELD_JSON(250)
+    Local Clbfile DETAILS(1)
+    Local Char FIELD_OBJECT(250)(dim(FIELDS, 2) - 1)
+    Local Integer WITHSEP
+
+    # Process detail fields
+    Local Integer COUNT_SCREEN_ITEMS : COUNT_SCREEN_ITEMS = func YUTILS.COUNT_MULTI(FIELDS) - 1
+    #qui registro il 1° indice trovato in YFIELDS di un campo di Testata
+    Local Integer Y1TESTATA: Y1TESTATA = -1
+
+    For I = 0 To COUNT_SCREEN_ITEMS
+      If FIELDS(I, 8) = TESTATA # se è un campo appartenente alla testata
+
+        #intercetto l'indice 1° Campo di Testata in YFIELDS
+        If(Y1TESTATA<0)
+          Y1TESTATA = I
+        Endif
+
+        Raz FIELD_OBJECT
+        Call FILL_FIELD_OBJECT(I, FIELDS, FIELD_OBJECT)
+        FIELD_JSON = func GET_STROBJ(AVOID.ACHAR, FIELD_OBJECT, 1, func YUTILS.IIF(type(FIELDS(I + 1, 0)) > 0 & (vireblc(FIELDS(I + 1, 0), 2) <> AVOID.ACHAR | Y1TESTATA>0), 0, 1) )
+        #FIELD_JSON = func GET_STROBJ(AVOID.ACHAR, FIELD_OBJECT, 1, func YUTILS.IIF(type(FIELDS(I + 1, 0)) > 0 & vireblc(FIELDS(I + 1, 0), 2) <> AVOID.ACHAR, 0, 1) )
+        Append DETAILS, FIELD_JSON
+      Endif
+    Next
+
+    # Process grid fields if any rows are detected
+    If GRID_ROW_LENGTH > 0
+      Local Clbfile GRID_ARRAY(1), CURRENT_ROW(1)
+      Local Integer CURRENT_FIELD : CURRENT_FIELD = 0
+      Local Integer CURRENT_ROW_INDEX : CURRENT_ROW_INDEX = 1
+
+      # To track the "currentRow" when FIELDS(I, 9) = "1"
+      Local Integer FOUND_CURRENT_ROW : FOUND_CURRENT_ROW = 0
+      Local Integer WITHSEP, ROW_INDEX : ROW_INDEX = 0
+      Local Integer IS_LAST_ARRAY_ITEM : IS_LAST_ARRAY_ITEM = 0
+      Local Char FIELD_OBJECT(250)(dim(FIELDS, 2) - 1)
+
+      # Process each grid field
+      For I = 0 To COUNT_SCREEN_ITEMS
+        If FIELDS(I, 8) = RIQUADRO
+          Raz FIELD_OBJECT
+          Call FILL_FIELD_OBJECT(I, FIELDS, FIELD_OBJECT)
+          #1- se campo successivo : di Testata; 2- se campo successivo: ha fieldName vuoto; 3- "" o  campo successivo è il 1° campo di dettaglio(cominciata una nuova riga)
+          If (FIELDS(I + 1, 8) = TESTATA & vireblc(FIELDS(I + 1, 0), 2) <> '') | (vireblc(FIELDS(I + 1, 0), 2) = AVOID.ACHAR | FIELDS(I + 1, 0) = FIRST_GRID_FIELD)
+            WITHSEP = 1 # NON METTO LA VIRGOLA
+          Else
+            WITHSEP = 0 # METTO LA VIRGOLA
+          Endif
+
+          FIELD_JSON = func GET_STROBJ(AVOID.ACHAR, FIELD_OBJECT, 1, WITHSEP)
+
+          # If the first riquadro field is detected again, start a new row
+          If FIELDS(I, 0) = FIRST_GRID_FIELD & CURRENT_FIELD > 0
+            # Append the current row to GRID_ARRAY
+            Append GRID_ARRAY, func GET_CLBARRAY_FROM_CLBARRAY(AVOID.ACHAR, CURRENT_ROW, 0)
+            Raz CURRENT_ROW
+            CURRENT_ROW_INDEX = CURRENT_ROW_INDEX + 1
+          Endif
+
+          # Check if this row is the "currentRow"
+          If FIELDS(I, 9) = "1"
+            FOUND_CURRENT_ROW = CURRENT_ROW_INDEX
+          Endif
+
+          Append CURRENT_ROW, FIELD_JSON
+          CURRENT_FIELD = CURRENT_FIELD + 1
+        Endif
+      Next
+
+      # Add last row if any fields remain
+      If dim(CURRENT_ROW, 1) > 0
+        Append GRID_ARRAY, func GET_CLBARRAY_FROM_CLBARRAY(AVOID.ACHAR, CURRENT_ROW, 1)
+      Endif
+
+      # Add the grid structure with currentRow and rows
+      Local Clbfile FINAL_GRID_STRUCTURE(1)(2)
+      FINAL_GRID_STRUCTURE(0) = func GET_INT("currentRow", FOUND_CURRENT_ROW - 1, 1)
+      FINAL_GRID_STRUCTURE(1) = func GET_CLBARRAY_FROM_CLBARRAY("rows", GRID_ARRAY, 1)
+
+      Local Clbfile FINAL_GRID
+      FINAL_GRID = func GET_CLBOBJ(AVOID.ACHAR, FINAL_GRID_STRUCTURE, 1, 1)
+
+      Append DETAILS, FINAL_GRID
+    Endif
+
+    # Final JSON structure
+    #Local Clbfile ACTIONS(1)
+    Local Clbfile FIELDS_OBJ(1)(func YUTILS.IIF(func YUTILS.COUNT(OPENFUNCTION) = 0, 2, 6))
+    If func YUTILS.COUNT(OPENFUNCTION) = 0
+      #payload fields
+      FIELDS_OBJ(0) = func GET_STR("type", "fields", 1)
+      FIELDS_OBJ(1) = func GET_CLBARRAY_FROM_CLBARRAY("details", DETAILS, 1)
+    Else
+      #payload open new function
+      FIELDS_OBJ(0) = func GET_STR("type", "function", 1)
+      FIELDS_OBJ(1) = func GET_STR("open", OPENFUNCTION(0), 1)
+      FIELDS_OBJ(2) = func GET_STR("title", OPENFUNCTION(1), 1)
+      FIELDS_OBJ(3) = func GET_STR("controller", OPENFUNCTION(2), 1)
+      FIELDS_OBJ(4) = func GET_INT("navigation", val(OPENFUNCTION(3)), 1)
+      FIELDS_OBJ(5) = func GET_CLBARRAY_FROM_CLBARRAY("details", DETAILS, 1)
+    Endif
+    Append ACTION_ITEMS(ACTION_INDEX), func GET_CLBOBJ(AVOID.ACHAR, FIELDS_OBJ, 1, 1)
+
+  Endif
+
+  #GRID
+  If(len(HEADER) > 0)
+
+    ACTION_INDEX+=1
+    Local Char HEADER_KEY_VALUE(250)(dim(HEADER, 1))
+    Call FILL_GRID_HEADER(HEADER, HEADER_KEY_VALUE)
+
+    Local Char DATA_KEY_VALUE(250)(dim(DATA, 1), dim(DATA, 2))
+    Call FILL_GRID_DATA(DATA, DATA_KEY_VALUE)
+
+    Local Clbfile GRID_ITEMS(1)(2)
+    GRID_ITEMS(0)= func GET_CLBOBJ("header", HEADER_KEY_VALUE, 0, 1)
+    GRID_ITEMS(1)= func GET_CLBARRAY("data", DATA_KEY_VALUE, 1)
+
+    Local Clbfile GRID_DETAILS_TEXT(1)
+    GRID_DETAILS_TEXT = func GET_CLBOBJ("details", GRID_ITEMS, 0, 1)
+
+    Local Clbfile GRID_OBJ(1)(2)
+    GRID_OBJ(0) = func GET_STR("type", "grid", 1)
+    GRID_OBJ(1) = GRID_DETAILS_TEXT
+
+    ACTION_ITEMS(ACTION_INDEX)= func GET_CLBOBJ(AVOID.ACHAR, GRID_OBJ, 1, 1)
+
+  Endif
+
+  Append JSON_RESULT, func GET_CLBARRAY_FROM_CLBARRAY("actions", ACTION_ITEMS, 1)
+  Append JSON_RESULT, func GET_CLOSECURLYBRACKET()
+
+End JSON_RESULT
+
+########################################################################################
+
+Subprog FILL_FIELD_ARRAY(FIELDS, FIELD_KEY_VALUE)
+  Value Char FIELDS()(,)
+  Variable Char FIELD_KEY_VALUE()(,)
+
+  Local Integer I
+  For I = 0 To dim(FIELDS, 1) - 1
+    FIELD_KEY_VALUE(I,0) = func GET_STR("fieldName", FIELDS(I,0), 0)
+    Case tolower(FIELDS(I,1))
+      When "bool":
+        FIELD_KEY_VALUE(I,1) = func GET_BOOL("fieldValue", val(FIELDS(I,2)), 0)
+      When "decimal" :
+        FIELD_KEY_VALUE(I,1) = func GET_DECIMAL("fieldValue", val(FIELDS(I,2)), 0)
+      When "integer" :
+        FIELD_KEY_VALUE(I,1) = func GET_INT("fieldValue", val(FIELDS(I,2)), 0)
+      When "char" :
+        FIELD_KEY_VALUE(I,1) = func GET_STR("fieldValue", FIELDS(I,2), 0)
+      When "date" :
+        FIELD_KEY_VALUE(I,1) = func GET_STR("fieldValue", FIELDS(I,2), 0)
+      When Default:
+    Endcase
+    FIELD_KEY_VALUE(I,2) = func GET_BOOL("fieldValid", val(FIELDS(I,3)), 0)
+    FIELD_KEY_VALUE(I,3) = func GET_STR("fieldMessage", FIELDS(I,4), 0)
+    FIELD_KEY_VALUE(I,4) = func GET_BOOL("fieldFocus", val(FIELDS(I,5)), 0)
+    FIELD_KEY_VALUE(I,5) = func GET_BOOL("fieldVisible", val(FIELDS(I,6)), 0)
+    FIELD_KEY_VALUE(I,6) = func GET_BOOL("fieldEnter", val(FIELDS(I,7)), 1)
+  Next
+End
+
+########################################################################################
+
+Subprog FILL_FIELD_OBJECT(INDEX, FIELDS, FIELD_ARRAY)
+  Value Integer INDEX
+  Value Char FIELDS()(,)
+  Variable Char FIELD_ARRAY()()
+
+  FIELD_ARRAY(0) = func GET_STR("fieldName", FIELDS(INDEX,0), 1)
+  FIELD_ARRAY(1) = func GET_STR("fieldType", FIELDS(INDEX,1), 1)
+  Case tolower(FIELDS(INDEX,1))
+    When "bool":
+      FIELD_ARRAY(2) = func GET_BOOL("fieldValue", val(FIELDS(INDEX,2)), 1)
+    When "decimal" :
+      FIELD_ARRAY(2) = func GET_DECIMAL("fieldValue", val(FIELDS(INDEX,2)), 1)
+    When "integer" :
+      FIELD_ARRAY(2) = func GET_INT("fieldValue", val(FIELDS(INDEX,2)), 1)
+    When "char" :
+      FIELD_ARRAY(2) = func GET_STR("fieldValue", FIELDS(INDEX,2), 1)
+    When "date" :
+      FIELD_ARRAY(2) = func GET_STR("fieldValue", FIELDS(INDEX,2), 1)
+    When Default:
+  Endcase
+  FIELD_ARRAY(3) = func GET_BOOL("fieldValid", val(FIELDS(INDEX,3)), 1)
+  FIELD_ARRAY(4) = func GET_STR("fieldMessage", FIELDS(INDEX,4), 1)
+  FIELD_ARRAY(5) = func GET_BOOL("fieldFocus", val(FIELDS(INDEX,5)), 1)
+  FIELD_ARRAY(6) = func GET_BOOL("fieldVisible", val(FIELDS(INDEX,6)), 1)
+  FIELD_ARRAY(7) = func GET_BOOL("fieldEnter", val(FIELDS(INDEX,7)), 1)
+End
+
+###################################################################################
+
+Subprog FILL_GRID_HEADER(FIELDS, FIELD_KEY_VALUE)
+
+  Value Char FIELDS()(,)
+  Variable Char FIELD_KEY_VALUE()()
+
+  Local Integer I
+  For I = 0 To dim(FIELDS, 1) - 1
+    FIELD_KEY_VALUE(I) = func GET_STR(FIELDS(I,0), FIELDS(I,1), 1)
+  Next I
+
+End
+
+###################################################################################
+
+Subprog FILL_GRID_DATA(FIELDS, FIELD_KEY_VALUE)
+
+  Value Char FIELDS()(,)
+  Variable Char FIELD_KEY_VALUE()(,)
+
+  Local Integer I, J
+  For I = 0 To dim(FIELDS, 1) - 1
+    For J = 0 To dim(FIELDS, 2) - 1
+      FIELD_KEY_VALUE(I,J) = FIELDS(I,J)
+      If(J < dim(FIELDS, 2) - 1)
+        FIELD_KEY_VALUE(I,J) += chr$(44)
+      Endif
+    Next J
+  Next I
+
+End
