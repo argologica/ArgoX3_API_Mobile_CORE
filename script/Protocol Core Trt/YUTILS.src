@@ -31,6 +31,88 @@ $GET_WS_CONSTANTS
 
 Return
 
+########################################################
+
+Funprog FIXURL(MALFORMEDURL)
+  Value Char MALFORMEDURL
+  Local Char URL(250)
+  Local Char PROTOCOL(10), TEMPURL(250), DOMAIN(250), REMAINDER(250)
+  Local Integer HASPROTOCOL, HASWWW, HASTLD, I, PROTOCOLPOS, SLASHPOS
+
+  # Rimuovi spazi iniziali e finali
+  URL = vireblc(MALFORMEDURL, 2)
+  HASPROTOCOL = 0
+  HASWWW = 0
+  HASTLD = 0
+
+  # Verifica se ha già un protocollo
+  If mid$(URL, 1, 7) = "http://" | mid$(URL, 1, 8) = "https://"
+    HASPROTOCOL = 1
+  Endif
+
+  # Aggiungi protocollo se mancante
+  If !HASPROTOCOL
+    URL = "https://" + URL
+  Endif
+
+  # Trova posizione dopo il protocollo
+  If mid$(URL, 1, 7) = "http://"
+    PROTOCOLPOS = 8
+    PROTOCOL = "http://"
+  Else
+    PROTOCOLPOS = 9  # https:// ha 8 caratteri
+    PROTOCOL = "https://"
+  Endif
+
+  # Verifica se ha www
+  If mid$(URL, PROTOCOLPOS, 4) = "www."
+    HASWWW = 1
+  Endif
+
+  # Verifica se ha un TLD comune (.com, .net, ecc.)
+  If instr(0, URL, ".com") > 0 | instr(0, URL, ".net") > 0 | instr(0, URL, ".org") > 0 | instr(0, URL, ".gov") > 0 | instr(0, URL, ".edu") > 0 | instr(0, URL, ".io") > 0 | instr(0, URL, ".dev") > 0 |
+& instr(0, URL, ".it") > 0 | instr(0, URL, ".fr") > 0 | instr(0, URL, ".de") > 0 | instr(0, URL, ".es") > 0 | instr(0, URL, ".uk") > 0
+    HASTLD = 1
+  Endif
+
+  # Aggiungi www se mancante e potrebbe essere necessario (euristica semplificata)
+  If !HASWWW & HASTLD
+    # Dobbiamo ricostruire l'URL con www.
+    DOMAIN = mid$(URL, PROTOCOLPOS, len(URL) - PROTOCOLPOS + 1)
+    URL = PROTOCOL + "www." + DOMAIN
+  Endif
+
+  # Aggiungi .com se non ha un TLD
+  If !HASTLD
+    # Trova la posizione del primo slash dopo il protocollo
+    SLASHPOS = instr(PROTOCOLPOS, URL, "/")
+
+    # Se non c'è slash dopo il dominio, aggiungi .com alla fine
+    If SLASHPOS = 0
+    URL = URL + ".com"
+    Else
+    # Altrimenti, inserisci .com prima del primo slash
+    DOMAIN = mid$(URL, 1, SLASHPOS - 1)
+    REMAINDER = mid$(URL, SLASHPOS, len(URL) - SLASHPOS + 1)
+    URL = DOMAIN + ".com" + REMAINDER
+    Endif
+  Endif
+
+  # Correggi doppi slash dopo il dominio
+  # Poiché non abbiamo la funzione replace, dobbiamo gestirlo manualmente
+  I = instr(PROTOCOLPOS, URL, "//")
+  While I > 0
+    TEMPURL = mid$(URL, 1, I) + mid$(URL, I + 2, len(URL) - (I + 2) + 1)
+    URL = TEMPURL
+    I = instr(PROTOCOLPOS, URL, "//")
+  Wend
+
+End URL
+
+########################################################
+              #Manipolazione stringhe#
+########################################################
+
 Subprog YSPLIT(STR,SEP,RESULT,NUMRES)
   Value Char STR,SEP
   Variable Char RESULT()()
@@ -282,9 +364,83 @@ Funprog FIND1D_ITEM(PARAMS_ARR, YKEY)
   Next I
 End -1
 
-########################################################
+#################################################################################
 #**
-#* Ritorna numero occorrenze dell'elemento YKEY  nella matrice PARAMS_ARR
+#* Funzione che ritorna l'indice del 1° item deiverso da YKEY (Altrimenti: -1)
+#*
+#* @param PARAMS_ARR Array dove cercare
+#* @param YKEY Elemento con cui confrontare
+#*!
+Funprog YFIND1D_NOT_EQITEM(PARAMS_ARR, YKEY)
+
+  Value Char PARAMS_ARR()()
+  Value Char YKEY
+  Local Integer I
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    If(vireblc(PARAMS_ARR(I),2)<> AVOID.ACHAR & PARAMS_ARR(I) <> YKEY)
+      End I
+    Endif
+  Next I
+End -1
+
+#################################################################################
+#**
+#* Metodo che controlla se l'array ha almeno degli elementi distinti
+#* (Ritorna: 1 se elementi tutti uguali, 0: se esistono elementi distinti)
+#*
+#* @param PARAMS_ARR
+#*!
+
+Funprog YEXISTDISTINCTS_IN1D(PARAMS_ARR)
+
+  Value Char PARAMS_ARR()()
+  Local Integer I,J,YDIM,YDISTINCTS: YDISTINCTS = 1 # =0 esitono DISTINTI , =1 (tutti uguali)
+  Local Char YTEMP(250)
+  YDIM = dim(PARAMS_ARR, 1)
+
+  For I = 0 To YDIM - 1
+    For J = I +1 To YDIM -1
+
+      #elementi non vuoti & distinti
+      If(vireblc(PARAMS_ARR(I),2) <> AVOID.ACHAR & vireblc(PARAMS_ARR(J),2) <> AVOID.ACHAR & PARAMS_ARR(I) <> PARAMS_ARR(J))
+       YDISTINCTS = 0
+       Break 2
+      Endif
+    Next J
+  Next I
+
+End YDISTINCTS
+
+#################################################################################
+#**
+#* Metodo che ritorna il 1° indice nell'array in cuisi trova YKEY, escludendo l'indice YEXCL_INDEX.
+#* Se non trovato ritorna -1.
+#*
+#* @param PARAMS_ARR Array dove ricercare
+#* @param YKEY  Elemento da ricercare nell'array
+#* @param YEXCL_INDEX Indice da escludere
+#*!
+
+Funprog YFIND1D_WITHEXCL(PARAMS_ARR, YKEY, YEXCL_INDEX)
+
+  Value Char PARAMS_ARR()()
+  Value Char YKEY
+  Value Integer YEXCL_INDEX
+  Local Integer I
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    If(vireblc(PARAMS_ARR(I), 2) <> AVOID.ACHAR & PARAMS_ARR(I) = YKEY & I <> YEXCL_INDEX)
+      End I
+    Endif
+  Next I
+End -1
+
+##########################################################################################
+#**
+#* Ritorna numero occorrenze dell'elemento YKEY  nella matrice (array 2D) PARAMS_ARR
 #*
 #* @param PARAMS_ARR Matrice dove cercare numero volte elemento YKEY
 #* @param YKEY Elemento di cui cercare il numero delle occorrenze
@@ -309,8 +465,35 @@ Funprog COUNT_ITEM(PARAMS_ARR, YKEY)
 
 End COUNT
 
-########################################################
+########################################################################################
+#**
+#* Ritorna numero occorrenze dell'elemento YKEY  nell'array 1D: PARAMS_ARR
+#*
+#* @param PARAMS_ARR Array dove cercare numero volte elemento YKEY
+#* @param YKEY Elemento di cui cercare il numero delle occorrenze
+#*!
+Funprog COUNT_1DITEM(PARAMS_ARR, YKEY)
 
+  Value Char PARAMS_ARR()()
+  Value Char YKEY
+  Local Integer COUNT : COUNT = 0
+  Local Integer I
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    If(PARAMS_ARR(I) = YKEY)
+      COUNT+=1
+    Endif
+  Next I
+
+End COUNT
+
+########################################################################################
+#**
+#* Metodo per conteggio elementi non voti di un array 1D
+#*
+#* @param ARRAY
+#*!
 Funprog COUNT(ARRAY)
   Value Char ARRAY()()
   Local Integer COUNT : COUNT = 0
@@ -324,6 +507,21 @@ Funprog COUNT(ARRAY)
   Next
 End COUNT
 
+########################################################
+
+Funprog INT_COUNT(INT_ARRAY)
+
+  Value Integer INT_ARRAY()
+  Local Integer COUNT : COUNT = 0
+
+  For I=0 To dim(INT_ARRAY) - 1
+    If vireblc(num$(INT_ARRAY(I)), 2) <> AVOID.ACHAR
+      COUNT+=1
+    Else
+      End COUNT
+    Endif
+  Next
+End COUNT
 ########################################################
 
 Funprog COUNT_MULTI(ARRAY)

@@ -35,8 +35,6 @@ Funprog GET_STRVALUE(YVALUE)
   Value Char YVALUE
 End chr$(34) + escJson(YVALUE) + chr$(34) #"YVALUE"
 
-
-
 #Fine funzioni utilita
 
 #chiave valore
@@ -175,10 +173,9 @@ Funprog GET_STRLST(YKEY, YARRAY, WITHSEP)
     YRESULT += func GET_STRVALUE(YARRAY(I))
     If I < ARRAY_SIZE
       YRESULT += func GET_SEPARATOR() #,
-    Else
-      YRESULT += func GET_CLOSESQUAREBRACKET() #]
     Endif
   Next
+  YRESULT += func GET_CLOSESQUAREBRACKET() #]
   If WITHSEP = 0
     YRESULT+= func GET_SEPARATOR()
   Endif
@@ -207,6 +204,34 @@ Funprog GET_INTLST(YKEY, YARRAY, WITHSEP)
 End YRESULT
 ##fine liste
 
+##############################################################
+
+##oggetto
+Funprog GET_INTOBJ(YKEY, YARRAY, WITHKEY, WITHSEP)
+  Value Char YKEY
+  Value Integer YARRAY()
+  Value Integer WITHKEY
+  Value Integer WITHSEP
+  Local Integer I, LAST_NON_EMPTY
+  Local Char YRESULT(250)
+
+  #se si crea un oggetto senza chiave, lo si utilizza solo come item di un array
+  YRESULT = func YUTILS.IIF(WITHKEY = 0, func GET_KEY(YKEY) + func GET_OPENCURLYBRACKET(), func GET_OPENCURLYBRACKET())
+  For I = 0 To dim(YARRAY) - 1
+    Append YRESULT, num$(YARRAY(I))
+    If I < dim(YARRAY) - 1
+      Append YRESULT, func GET_SEPARATOR() #,
+    Endif
+  Next I
+
+  Append YRESULT, func GET_CLOSECURLYBRACKET
+
+  If WITHSEP = 0
+    Append YRESULT, func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
 ##oggetto
 Funprog GET_STROBJ(YKEY, YARRAY, WITHKEY, WITHSEP)
   Value Char YKEY
@@ -225,7 +250,9 @@ Funprog GET_STROBJ(YKEY, YARRAY, WITHKEY, WITHSEP)
       Append YRESULT, func GET_SEPARATOR() #,
     Endif
   Next I
+
   Append YRESULT, func GET_CLOSECURLYBRACKET
+
   If WITHSEP = 0
     Append YRESULT, func GET_SEPARATOR()
   Endif
@@ -244,6 +271,8 @@ Funprog GET_CLBOBJ(YKEY, YARRAY, WITHKEY, WITHSEP)
   #se si crea un oggetto senza chiave, lo si utilizza solo come item di un array
   Gosub CREATE_CLBOBJ
 End YRESULT
+
+##############################################################
 
 Funprog GET_CLBOBJ_FROM_STRARRAY(YKEY, YARRAY, WITHKEY, WITHSEP)
   Value Char YKEY
@@ -274,7 +303,19 @@ $CREATE_CLBOBJ
 
 Return
 
+##############################################################
 ##array
+
+Funprog GET_EMPTYARRAY(YKEY, WITHKEY)
+  Value Char YKEY
+  Value Integer WITHKEY
+
+  Local Char EMPTY_ARR(2) : EMPTY_ARR = func GET_OPENSQUAREBRACKET + func GET_CLOSESQUAREBRACKET
+
+End func YUTILS.IIF(WITHKEY = 0, func GET_KEY(YKEY) + EMPTY_ARR, EMPTY_ARR )
+
+##############################################################
+
 Funprog GET_STRARRAY(YKEY, YARRAY, WITHSEP)
   Value Char YKEY
   Value Char YARRAY()(,)
@@ -301,6 +342,8 @@ Funprog GET_STRARRAY(YKEY, YARRAY, WITHSEP)
   Endif
 
 End YRESULT
+
+##############################################################
 
 Funprog GET_CLBARRAY(YKEY, YARRAY, WITHSEP)
   Value Char YKEY
@@ -329,6 +372,43 @@ Funprog GET_CLBARRAY(YKEY, YARRAY, WITHSEP)
   Endif
 
 End YRESULT
+
+##############################################################
+
+Funprog GET_CLBARRAY_FROM_STRARRAY(YKEY, YARRAY, WITHSEP)
+  Value Char YKEY
+  Value Char YARRAY()()
+  Value Integer WITHSEP
+
+  Local Clbfile YRESULT(2)
+
+  If YKEY <> AVOID.ACHAR
+    Append YRESULT, func GET_STRVALUE(YKEY) + func GET_OPENCURLYBRACKET_ARRAY()
+  Else
+    Append YRESULT, func GET_OPENSQUAREBRACKET()
+  Endif
+
+  Local Integer I
+  Local Integer ARRAY_SIZE : ARRAY_SIZE = func YUTILS.COUNT(YARRAY) - 1
+
+  For I = 0 To ARRAY_SIZE
+    Append YRESULT, YARRAY(I)
+    If I < ARRAY_SIZE
+      If vireblc(YARRAY(I), 2) <> AVOID.ACHAR
+        Append YRESULT, func GET_SEPARATOR() #,
+      Endif
+    Endif
+  Next I
+
+  YRESULT += func GET_CLOSESQUAREBRACKET() #]
+
+  If WITHSEP = 0
+    Append YRESULT, func GET_SEPARATOR()
+  Endif
+
+End YRESULT
+
+##############################################################
 
 Funprog GET_CLBARRAY_FROM_CLBARRAY(YKEY, YARRAY, WITHSEP)
   Value Char YKEY
@@ -363,7 +443,8 @@ Funprog GET_CLBARRAY_FROM_CLBARRAY(YKEY, YARRAY, WITHSEP)
 
 End YRESULT
 
-###############################
+##############################################################
+
 Funprog GET_STRARRAY_FROM_STRARRAY(YKEY, YARRAY, WITHSEP)
   Value Char YKEY
   Value Char YARRAY()()
@@ -397,6 +478,8 @@ Funprog GET_STRARRAY_FROM_STRARRAY(YKEY, YARRAY, WITHSEP)
   Endif
 
 End YRESULT
+
+##############################################################
 
 ##print
 Funprog GET_JSON(YJSON)

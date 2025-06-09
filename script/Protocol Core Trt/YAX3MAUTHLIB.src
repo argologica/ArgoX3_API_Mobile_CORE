@@ -14,7 +14,7 @@ Subprog YCHECK_USER(YUSERNAME, YRESPONSE)
   Read [F:YAX3MU]YAX3MU0=YUSERNAME
 
   Clbfile RESPONSE(0)
-  If rowcount([F:YAX3MU]) > 0
+  If fstat = 0
     RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 0)
     RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Utente trovato!", 0)
     Local Char USER_DATA(250)(3)

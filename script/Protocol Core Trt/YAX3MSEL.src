@@ -19,6 +19,7 @@ Subprog SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE)
   Value Char QUERY
   Variable Clbfile RESPONSE
 
+Call OUVRE_TRACE("SEL_CUSTOM-"-FUNCTION-"-"-TYPE_FIELD) From LECFIC
   #Logging
   Local Char YLOGDIRNAME(20): YLOGDIRNAME = "ArgoX3Mobile_Log"
 
@@ -51,7 +52,6 @@ Subprog SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE)
 
   #caso in cui è stata inserita una query da mobile, se il count sul filtro è maggiore di 0 printiamo i filtrati su json
   If(COUNT_CUSTOM > 0)
-    #RESPONSE = func YJSONSERIALIZEBCK.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, EMPTY_FIELDS, HEADER, FILTERED_VALUES)
     RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION ,EMPTY_FIELDS, HEADER, FILTERED_VALUES)
 
 #caso in cui NON c'è query, printiamo l'oggetto complessivo su json
@@ -69,6 +69,9 @@ Subprog SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE)
   #log-SEL_custom
   Call YPRINT_DIR_CLB(YLOGDIRNAME,RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
   #Call YPRINT_CLB(RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
+
+Call FERME_TRACE From LECFIC
+
 End
 
 ##############################################################################################################################################
@@ -421,7 +424,14 @@ $SET_HEADERVALUES
   For INDEX_HEADER = 0 To NUM_COLS - 1
     INDEX_VALUES = 0
     For [LNK]
-      VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), evalue(COL(INDEX_HEADER)), 1)
+
+      #Gestione Selezioni/SEL(Consultazioni Mobile) senza Multimedia
+      If(HEADER(INDEX_HEADER, 0)<>"actions")
+        VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), evalue(COL(INDEX_HEADER)), 1)
+      Else
+        VALUES(INDEX_VALUES, INDEX_HEADER) =  YMEDIA(INDEX_VALUES)
+      Endif
+      #VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), evalue(COL(INDEX_HEADER)), 1)
       INDEX_VALUES+=1
     Next
   Next

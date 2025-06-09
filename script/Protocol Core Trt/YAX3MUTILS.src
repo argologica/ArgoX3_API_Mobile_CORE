@@ -42,7 +42,7 @@ $YAX3MOB_INIT_ACTIONFIELD
     Local Char YALERT_WS(50)(1..3,1..3)
     Local Char YHEADER(0)(1,1)
     Local Char YDATA(0)(1,1)
-    Const Integer YMAXFLDCOUNT: YMAXFLDCOUNT = 250 #+
+    Const Integer YMAXFLDCOUNT: YMAXFLDCOUNT = 300
 
     #Modalità MODIFICA
     Local Integer YMODIF : YMODIF = 0 #FALSE
@@ -166,14 +166,14 @@ Subprog YINIT_SCREENFLDS(YFIELDS,YWINNAME)
        Read [F:YAMK]CODMSK=YMSKNAME
        Columns [F:YAMK](TYPBLOC,NBBLOC,NBLIGT,BASPAG)
        If(fstat=0)
-         Gosub GET_MSKNBLIG_LIST #lista nblig di mskent
-         Gosub GET_MSKFLDS       # popolata yfields , INDEX ++
+         Gosub GET_MSKNBLIG_LIST  #lista nblig di mskent
+         Gosub GET_MSKFLDS        # popolata yfields , INDEX ++
        Endif
     Endif
 
     #SCHEDE
     For YI=0 To [F:YAWI]NBMSK -1  #ciclo su N° mask
-      #INDEX =0
+      YDETTBLKIDX =-1 #reset a -1, per ricerca eventuale nuovo indice Blocco Riquadro
       YMSKNAME = [F:YAWI]NOMMSK(YI)
       #estraggo blocchi
       Read [F:YAMK]CODMSK=YMSKNAME
@@ -215,7 +215,7 @@ Return
 
 $GET_MSKFLDS
 
- Local Integer YFLDOCCNUM   #N° occorrenze di un campo nella matrice YFIELDS
+ Local Integer YFLDOCCNUM   #N°occorrenze di un campo nella matrice YFIELDS
  Local Integer YFLDOCC(50)  #Array delle occorrenze
 
  #FILTRO su cod Msk e su campi con cod <> param blocco
@@ -250,6 +250,7 @@ Return
 
 $YSET_FLDPARAMS
 
+  #--yfields-params---------------------------------------------------#
   Const Integer YCOL_NAME : YCOL_NAME = 0
   Const Integer YCOL_TYPE : YCOL_TYPE = 1
   Const Integer YCOL_VALUE : YCOL_VALUE = 2
@@ -264,7 +265,6 @@ $YSET_FLDPARAMS
 Return
 
 ####################################################################################################################
-
 #**
 #* Subprog per setting Oggetto-Campo nella matrice YFIELDS
 #*
@@ -301,11 +301,11 @@ Subprog YSETFIELDITEM(YFIELDS,YFLDIDX,YCODZON,YCODTYP,YSAIAFF,YNUMBLOC,YDETTBLKI
   Endif
 
   ## Focus: solo il primo campo di maschera ha il focus all'init( alla 1° az campo)
-  If(YFIELDS(YFLDIDX, YCOL_FOCUS)= AVOID.ACHAR & YFLDIDX = 0)
-    YFIELDS(YFLDIDX, YCOL_FOCUS) = "1"
-  Else
-    YFIELDS(YFLDIDX, YCOL_FOCUS) = "0"
-  Endif
+#  If(YFIELDS(YFLDIDX, YCOL_FOCUS)= AVOID.ACHAR & YFLDIDX = 0)
+#    YFIELDS(YFLDIDX, YCOL_FOCUS) = "1"
+#  Else
+#    YFIELDS(YFLDIDX, YCOL_FOCUS) = "0"
+#  Endif
 
   ## Tipo Campo
   Read [F:YATY]CODTYP = YCODTYP
@@ -320,7 +320,7 @@ Subprog YSETFIELDITEM(YFIELDS,YFLDIDX,YCODZON,YCODTYP,YSAIAFF,YNUMBLOC,YDETTBLKI
     YFIELDS(YFLDIDX, YCOL_TYPE) = "date"
   Endif
 
-  ## Visibilità
+  ##Visibilità
   If (YSAIAFF <> 3 & YFIELDS(YFLDIDX, YCOL_VIS) = AVOID.ACHAR)#NASCOSTO
     YFIELDS(YFLDIDX, YCOL_VIS) =  "1"
   Else
@@ -720,11 +720,7 @@ Subprog YAX3MOB_DISZO(YFIELDS,YMSKALIAS,YFIELDCODE)
   If(![V]GWEBSERV) #X3
     Diszo = "[M:"+YMSKALIAS+"]"+YFIELDCODE
   Else #AX3M
-   If(CURRENTROW=-1)
-      YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,0)
-    Else
-      YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,CURRENTROW)
-    Endif
+    YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)
     YFIELDS(YI,YCOL_ENA)= "0"
   Endif
 End
@@ -752,7 +748,11 @@ Subprog YAX3MOB_DISZO_RIQUADRO(YFIELDS,YMSKALIAS,YFIELDCODE,CURRENTROW)
   If(![V]GWEBSERV) #X3
     Diszo = "[M:"+YMSKALIAS+"]"+YFIELDCODE + "(" + num$(CURRENTROW) + ")"
   Else #AX3M
-    YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,CURRENTROW)
+    If(CURRENTROW=-1)
+      YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,0)
+    Else
+      YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,CURRENTROW)
+    Endif
     YFIELDS(YI,YCOL_ENA)= "0" #"1"
   Endif
 End
@@ -950,7 +950,30 @@ Subprog YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS, YFIELDCODE, CURRENTROW)
   Value Integer CURRENTROW
 
   If(![V]GWEBSERV)
-    Affzo = "[M:"+YMSKALIAS+"]" + YFIELDCODE + "(" + num$(CURRENTROW) + ")"
+    Affzo ="[M:"+YMSKALIAS+"]" + YFIELDCODE + "(" + num$(CURRENTROW) + ")"
+  Endif
+End
+
+###################################################################################################################
+#**
+#* Gestione AFFZO per X3 (SOLO X3) per aggiornamento variabile Fondo Riquadro
+#* (usato per Riquadro delle Consultazioni)
+#*
+#* @param YMSKALIAS  Alias videata corrente/in esame
+#* @param YNBLIGCODE Codice Campo associato avariabile fondo riquadro della videata in esame
+#* @param YNBLIGVAL  Valore da assegnare a variabile fondo Riquadro( N° righe da mostrare)
+#*!
+
+Subprog YAX3MOB_UPDATE_NBLIG(YMSKALIAS,YNBLIGCODE,YNBLIGVAL)
+
+  Value Char YMSKALIAS
+  Value Char YNBLIGCODE
+  Value Integer YNBLIGVAL
+
+  If(![V]GWEBSERV)
+    Default Mask "[M:"+YMSKALIAS+"]"
+    Assign "[M]"+YNBLIGCODE With YNBLIGVAL
+    Affzo = "[M:"+YMSKALIAS+"]"+YNBLIGCODE
   Endif
 End
 
@@ -969,7 +992,7 @@ Subprog YAX3MOB_EFFZO(YFIELDS,YMSKALIAS,YFIELDCODE)
   Value Char YFIELDCODE
 
   If(![V]GWEBSERV) #solo su X3
-    Effzo = "[M:"+YMSKALIAS+"]" + YFIELDCODE
+    Effzo = "[M:"+YMSKALIAS+"]"+YFIELDCODE
   Else
     # VA SETTATO YFIELDS SUL FIELDENTER
     #Call YAX3MOB_RAZ(YFIELDS,YMSKALIAS,YFIELDCODE)
@@ -1102,9 +1125,9 @@ Subprog YAX3MOB_SETVALID(YFIELDS,YFIELDCODE,YMKSTAT)
   Local Integer YI : YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)
 
   Case YMKSTAT
-    When 0,1  #ok,warning
+    When 0  #ok
       YFIELDS(YI,YCOL_VALID)= "1" #"0" #valid
-    When 2  #errore
+    When 1,2  #warning,errore
       YFIELDS(YI,YCOL_VALID)= "0" #"1"
     When Default
   Endcase
@@ -1131,9 +1154,9 @@ Subprog YAX3MOB_SETVALID_RIQUADRO(YFIELDS,YCURRFIELD,YMKSTAT, YPOS)
   Local Integer YI : YI = func YUTILS.FIND_MULTITEM(YFIELDS,YCURRFIELD,YPOS)  #prendo il 1°:se T o D
 
   Case YMKSTAT
-    When 0,1  #ok,warning
+    When 0  #ok
       YFIELDS(YI,YCOL_VALID)= "1" #"0" #valid
-    When 2  #errore
+    When 1,2  #warning,errore
       YFIELDS(YI,YCOL_VALID)= "0" #"1"
     When Default
   Endcase
@@ -1157,7 +1180,7 @@ $YAX3MOB_END_ACTIONFIELD
     Endif
 
     Gosub YAX3MOB_GLOBALSET
-    YRESPONSE = func YJSONSERIALIZELDTEST.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
+    YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
   Endif
 
   #LOG (END):
@@ -1251,7 +1274,16 @@ $YAX3MOB_END_BUTTONACTION
   If(GWEBSERV)
 
     If(toupper(YFUNC_TYPE)="CONS")
-       Gosub SEL_CONS From YAX3MSEL
+
+      #Esiste anche la chiave "actions" (per gestione Multimedia)
+      If(type(YMEDIA)>0 & func YUTILS.COUNT(YMEDIA)>0 & COUNT_VALUES >0)
+        NUM_COLS +=1
+      Endif
+
+      If(COUNT_VALUES >0)
+        Gosub SEL_CONS From YAX3MSEL
+        #Gosub SEL_CONS From YAX3MSELTMP
+      Endif
     Else
       Gosub YAX3MOB_BUTTONGLOBALSET
 
@@ -1265,6 +1297,10 @@ $YAX3MOB_END_BUTTONACTION
 
       #LOG YRESPONSE
       Call YPRINT_CLB(YRESPONSE, "YRESPONSE_" + YACTION, "json") From YUTILS
+    Endif
+  Else
+    If(toupper(YFUNC_TYPE)="CONS" & COUNT_VALUES =0)
+
     Endif
   Endif
 Return
@@ -1302,7 +1338,7 @@ $YAX3MOB_GLOBALSET
   Local Integer YK: YK = func YUTILS.FIND_ITEM(YFIELDS,YCURRFIELD) #prendo il 1°:se T o D
 
   #1-values
-  If(YFIELDS(YK, 8) = "0") #testata
+  If(YFIELDS(YK,8) = "0") #testata
     Gosub YAX3MOB_SETVALUES
   Else #dettaglio
     Gosub YAX3MOB_SETVALUES_RIQUADRO
@@ -1373,6 +1409,17 @@ $YAX3MOB_GLOBALSET_NOFOCUS
     Endif
   Endif
 
+Return
+
+################################################################################################################
+
+$YAX3MOB_RAZFIELDMESSAGES
+
+  Local Integer YI
+  Const Integer YCOL_MEX : YCOL_MEX= 4
+  For YI = 0 To dim(YFIELDS,1)-1
+    YFIELDS(YI,YCOL_MEX) = AVOID.ACHAR
+  Next
 Return
 
 #################################################################################################################
@@ -1516,7 +1563,7 @@ $YAX3MOB_SETVALUES_FROMBUTTON
 
     If YITEM_POS >= 0
 
-      If YFIELDS(YITEM_POS, 8) = "0" # Elemento non di testata
+      If YFIELDS(YITEM_POS,8) = "0" # Elemento Testata
         YCURRENTROW_INDEX = func YUTILS.FIND_ITEM(YFIELDS, YPARAM)
         If YCURRENTROW_INDEX >= 0
           Gosub YAX3MOB_SETFIELD
@@ -1607,6 +1654,55 @@ $YAX3MOB_SETFIELD_RIQUADRO_MODIF
   Endif
 Return
 
+#############################################################################################################
+#**
+#* Funzione per azzerare/pulire il riquadro Lato X3/lato Mobile
+#*
+#* @param YFIELDS Matrice dei campi di videata
+#* @param YMSKALIAS  Alias videata
+#*
+#*!
+
+Subprog YAX3MOB_RAZRIQUADRO(YFIELDS,YMSKALIAS)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+
+  Local File AMSKZON [F:YAMZ]
+  Local Integer YI,YJ,YK
+  Local Char YDETTFLDCODES(250)(50)
+  Local Char YDFLDCODE(250)
+
+  If(GWEBSERV)
+    For YI =0 To dim(YFIELDS,1)-1
+      #campo riquadro
+      If(YFIELDS(YI,8) = "1")
+
+        YDFLDCODE = YFIELDS(YI,0)
+        If(find(YDFLDCODE,YDETTFLDCODES)=0)
+          YDETTFLDCODES(YK) = YDFLDCODE
+          YK +=1
+        Else
+          #razzo tutta la riga matrice (codice campo compreso)
+          For YJ=0 To dim(YFIELDS,2)-1
+            Raz YFIELDS(YI,YJ)
+          Next
+        Endif
+      Endif
+    Next
+  Else
+    #imposto  a 0(esempio: NBLIG = 0)
+    Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKALIAS & [F:YAMZ]DIME = 0)
+    Read [F:YAMZ] First
+    YNBLIGCODE = [F:YAMZ]CODZON # assumiamo un solo riquadro per videata
+
+    Default Mask "[M:"+YMSKALIAS+"]"
+    Assign "[M]"+YNBLIGCODE With 0
+    Affzo = "[M:"+YMSKALIAS+"]"+YNBLIGCODE
+  Endif
+End
+
+
 ##########################################################################################################
 #                                     GESTIONE BOTTONE DI FINESTRA
 ##########################################################################################################
@@ -1660,7 +1756,7 @@ Subprog YAX3MOB_IMPORTSIL(YIMPORT_MODEL, YCSVTEXT, YSUCCESS, YMESSAGE)
   If(vireblc(YIMPORT_MODEL,2)<> AVOID.ACHAR)
 
     Call IMPORT(YIMPORT_MODEL, "NO", "REALTIME", chr$(10), YCSVTEXT, YREQUEST_NUMBER, YSUCCESS, YMESSAGE) From AOWSIMPORT
-    YMESSAGE = func YUTILS.IIF(vireblc(YMESSAGE, 2) <> AVOID.ACHAR, YMESSAGE, func YAX3MOBGET_TRACE(GTRACE))
+    #YMESSAGE = func YUTILS.IIF(vireblc(YMESSAGE, 2) <> AVOID.ACHAR, YMESSAGE, func YAX3MOBGET_TRACE(GTRACE))
 
     #Call ECR_TRACE("Stato import:" - num$(YSUCCESS) - " - Messaggio:" - YMESSAGE,0) From GESECRAN
     Call YAX3MOB_ECRTRACE(0,"Stato import:" - num$(YSUCCESS) - " - Messaggio:" - YMESSAGE) From  YAX3MUTILS  #log
@@ -1864,6 +1960,8 @@ End
 
 #########################################################################################################
 #########################################################################################################
+##Con questa funzione setto esclusivamente le variabili ALERT_TYPE E ALERT_MESSAGE per riferimento
+
 #**
 #* Visualizzazione eventuale Messaggio per azione Bottone di Finestra, a video (X3/Mobile).
 #* ( Con questa funzione setto esclusivamente le variabili ALERT_TYPE E ALERT_MESSAGE per riferimento )
@@ -1913,7 +2011,10 @@ Subprog YSTRVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
   If(!GWEBSERV)
     YVALEURVAR =YVALEURARR(0)
   Else
-    YVALEURVAR =YVALEURARR(CURRENTROW)
+    If(CURRENTROW >=0)
+      YVALEURVAR =YVALEURARR(CURRENTROW)
+    Endif
+  #YVALEURVAR =YVALEURARR(CURRENTROW)
   Endif
 End
 
@@ -1940,7 +2041,10 @@ Subprog YINTVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
   If(!GWEBSERV)
     YVALEURVAR =YVALEURARR(0)
   Else
-    YVALEURVAR =YVALEURARR(CURRENTROW)
+    If(CURRENTROW >=0)
+      YVALEURVAR =YVALEURARR(CURRENTROW)
+    Endif
+    #YVALEURVAR =YVALEURARR(CURRENTROW)
   Endif
 End
 
@@ -1954,7 +2058,25 @@ Subprog YDECVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
   If(!GWEBSERV)
     YVALEURVAR =YVALEURARR(0)
   Else
-    YVALEURVAR =YVALEURARR(CURRENTROW)
+    If(CURRENTROW >=0)
+      YVALEURVAR =YVALEURARR(CURRENTROW)
+    Endif
+    #YVALEURVAR =YVALEURARR(CURRENTROW)
+  Endif
+End
+##################################################################################################################
+Subprog YSETDECVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
+
+  Variable Decimal YVALEURARR()
+  Variable Decimal YVALEURVAR
+  Value Integer CURRENTROW
+
+  If(!GWEBSERV)
+    YVALEURARR(0)=YVALEURVAR
+  Else
+    If(CURRENTROW >=0)
+      YVALEURARR(CURRENTROW)=YVALEURVAR
+    Endif
   Endif
 End
 
@@ -1968,7 +2090,10 @@ Subprog YDATEVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
   If(!GWEBSERV)
     YVALEURVAR =YVALEURARR(0)
   Else
-    YVALEURVAR =YVALEURARR(CURRENTROW)
+    If(CURRENTROW >=0)
+      YVALEURVAR =YVALEURARR(CURRENTROW)
+    Endif
+    #YVALEURVAR =YVALEURARR(CURRENTROW)
   Endif
 End
 
@@ -2134,12 +2259,12 @@ Return
 $YAX3MOB_INITLOG
 
   Gosub YAX3MOB_SET_ENVLOG       #1-LOG ENVIRONMENT
-  Gosub YAX3MOB_SET_HEADERLOG    #2-COMPOSIZIONE INTESTAZIONE
+  #Gosub YAX3MOB_SET_HEADERLOG    #2-COMPOSIZIONE INTESTAZIONE
   # Gosub YAX3MOB_SET_HEADERLOG From YAX3MUTILS_BETA
 
   #3-STAMPA:(yutils)
-  Call YWRITE_LOG(YLOGTEXT)
-  Raz YLOGTEXT
+  #Call YWRITE_LOG(YLOGTEXT)
+  #Raz YLOGTEXT
 
   #4-LOG- STAMPE in INIT -lato Mobile
   If([V]GWEBSERV)
@@ -2259,7 +2384,7 @@ $YAX3MOB_ENDLOG
     Endif
   Endif
 
-  Raz YLOGTEXT
+  #Raz YLOGTEXT
 Return
 
 ############################################################################################

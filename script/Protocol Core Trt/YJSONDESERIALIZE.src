@@ -137,6 +137,7 @@ Subprog JSONPARSE_CLB(YDOC, PPROGRESS, YELEMENTTREE, YELECOUNTER, WERRMSG, YRESP
 
 End
 
+##################################################################################
 
 Subprog RAISE_END_ELEMENT(PURI, PELEMENT, PVALUE_CLB, PCOUNT, PSTOP, YRESPONSE)
   Value Char PURI()
@@ -160,6 +161,8 @@ Subprog RAISE_END_ELEMENT(PURI, PELEMENT, PVALUE_CLB, PCOUNT, PSTOP, YRESPONSE)
     When "END_ELEMENT" : Gosub END_ELEMENT
   Endcase
 End
+
+################################################################################
 
 $END_ELEMENT
 
@@ -186,8 +189,9 @@ $END_ELEMENT
 
   # Memorizza il percorso e il valore
   YRESPONSE(I, 0) = vireblc(YFULLPATH, 2)
-  YRESPONSE(I, 1) = vireblc(PVALUE, 2)
-#Infbox YRESPONSE(I, 0) - YRESPONSE(I, 1)
+  YRESPONSE(I, 1) = vireblc(unescJson(PVALUE), 2)
+  #YRESPONSE(I, 1) = vireblc(PVALUE, 2)
+
 Return
 
 #######################################################################################################################
@@ -340,7 +344,6 @@ Funprog LASTINDEX(WELEMENTTREE)
   Endif
 End I
 
-
 #############################################################################################
 
 #**
@@ -368,7 +371,7 @@ Return
 #**
 #* YPATH è il path complessivo di una chiave json se abbiamo un elemento code in root e
 #* uno in un oggetto child con la stessa chiave nel primo caso dobbiamo utilizzare "code.code"
-#* nel secondo "address.code"
+#* nel secondo "address.code" <br /><br />
 #* Call JSONPARSE_CLB(YBODY, AVOID.ACHAR, PPROGRESS, YELEMENTTREE, YELECOUNTER, WERRMSG, YJSON_ARR) From YJSONDESERIALIZE
 #* Local Char YAPIKEY(36) : YAPIKEY = func YJSONDESERIALIZE.GET_JSON_VALUE(YJSON_ARR, "code.code")
 #* Local Char YCTY(10) : YCTY = func YJSONDESERIALIZE.GET_JSON_VALUE(YJSON_ARR, "address.code.code")
@@ -380,7 +383,7 @@ Return
 #*    "city":"Ravenna"
 #*  }
 #* }
-#* In ogni caso stampando YRESPONSE sopra si può vedere l'intero path di ogni chiave del json
+#* Stampando YRESPONSE sopra si può vedere l'intero path di ogni chiave del json
 #*!
 Funprog GET_JSON_VALUE(YKEY_VALUE, YPATH)
   Variable Char YKEY_VALUE()(,)
@@ -462,7 +465,7 @@ Return
 #* @param YFIELDS Matrice dei campi
 #*!
 
-Subprog YJSON2ARRAY(YBODY,YCURRENTUSER,YFIELDS)
+Subprog YJSON2ARRAY(YBODY, YCURRENTUSER, YFIELDS)
 
   Value Clbfile YBODY
   Variable Char YCURRENTUSER
@@ -473,7 +476,7 @@ Subprog YJSON2ARRAY(YBODY,YCURRENTUSER,YFIELDS)
   Local Char WERRMSG(100)
   Local Char YELEMENTTREE(250)(0..func F_DEEPLEVEL() )
   Local Char YELECOUNTER(250)(func F_MAXELEMENT(), func F_DEEPLEVEL() + 1)
-  Local Char YRESPONSE(250)(450,2)
+  Local Char YRESPONSE(250)(2600,2)
 
   Local Integer YI,YJ: YJ=-1
   Local Char YPATH(250),YVALUE(50),YJSON_KEY(20),YTURN_LEAF(20)
