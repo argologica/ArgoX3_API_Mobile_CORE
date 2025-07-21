@@ -1,4 +1,34 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
+###################################################################################################################################
+#                                                   LIBRERIA PER SELEZIONI/CONSULTAZIONI (AX3M)
+###################################################################################################################################
+
+#**
+#* Subprog per Selezione Custom con valorizzazione Multi-Campo per MOBILE
+#*
+#* @param FUNCTION Funzione utilizzata
+#* @param TYPE_FIELD Tipo del Campo
+#* @param PARAMS Parametri per Critere
+#* @param CRITERE Array per Critere
+#* @param QUERY stringa per ricerca in "OR" nel Record set ottenuto da Critere
+#* @param SELECTEDFIELDS Array con elenco dei campi da valorizzare in Selezione (MOD. Selezione con valorizzazione multi-campo)
+#* @param RESPONSE Clob di riposta per Grid
+#*!
+
+Subprog SEL_MULTICUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, SELECTEDFIELDS, RESPONSE)
+
+  Value Char FUNCTION
+  Value Char TYPE_FIELD
+  Value Char PARAMS()
+  Value Char CRITERE()
+  Value Char QUERY
+  Value Char SELECTEDFIELDS()()
+  Variable Clbfile RESPONSE
+
+  Gosub SEL_BASECUSTOM
+End
+
+###############################################################################################
 #**
 #* Subprog per Selezione Custom Campo per MOBILE
 #*
@@ -19,7 +49,20 @@ Subprog SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE)
   Value Char QUERY
   Variable Clbfile RESPONSE
 
-Call OUVRE_TRACE("SEL_CUSTOM-"-FUNCTION-"-"-TYPE_FIELD) From LECFIC
+  Local Char SELECTEDFIELDS(0)(1) #inizializzato array per selez multi-campo
+  Gosub SEL_BASECUSTOM
+End
+
+###################################################################################################
+#**
+#* Sub per Selezione Custom :
+#* Richiamata in modalità: selez mono-campo(classica)(SEL_CUSTOM); selez multi-campo (SEL_MULTICUSTOM)
+#*!
+
+$SEL_BASECUSTOM
+
+Call OUVRE_TRACE("SEL_BASECUSTOM-"-FUNCTION-"-"-TYPE_FIELD) From LECFIC
+
   #Logging
   Local Char YLOGDIRNAME(20): YLOGDIRNAME = "ArgoX3Mobile_Log"
 
@@ -52,18 +95,21 @@ Call OUVRE_TRACE("SEL_CUSTOM-"-FUNCTION-"-"-TYPE_FIELD) From LECFIC
 
   #caso in cui è stata inserita una query da mobile, se il count sul filtro è maggiore di 0 printiamo i filtrati su json
   If(COUNT_CUSTOM > 0)
-    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION ,EMPTY_FIELDS, HEADER, FILTERED_VALUES)
+    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION ,EMPTY_FIELDS, HEADER, FILTERED_VALUES, SELECTEDFIELDS)
 
-#caso in cui NON c'è query, printiamo l'oggetto complessivo su json
+  #caso in cui NON c'è query, printiamo l'oggetto complessivo su json
   Elsif(COUNT_VALUES > 0 & vireblc(QUERY, 2) = AVOID.ACHAR)
 
-    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS,YOPENFUNCTION ,EMPTY_FIELDS, HEADER, VALUES)
+    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,EMPTY_FIELDS, HEADER, VALUES, SELECTEDFIELDS)
+
   #caso in cui non ci sono dati di output
   Else
     Local Char FIELDS(0)(1,1)
     Local Char HEADER(0)(1,1)
     Local Char DATA(0)(1,1)
-    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "error", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA)
+
+    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "error", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA, SELECTEDFIELDS)
+
   Endif
 
   #log-SEL_custom
@@ -72,7 +118,7 @@ Call OUVRE_TRACE("SEL_CUSTOM-"-FUNCTION-"-"-TYPE_FIELD) From LECFIC
 
 Call FERME_TRACE From LECFIC
 
-End
+Return
 
 ##############################################################################################################################################
 #**
@@ -88,7 +134,7 @@ Subprog SEL_OBJ(OBJECT, QUERY, RESPONSE)
   Value Char QUERY
   Variable Clbfile RESPONSE
 
- #Call OUVRE_TRACE("SEL_OBJ-"-OBJECT) From LECFIC
+ Call OUVRE_TRACE("SEL_OBJ-"-OBJECT) From LECFIC
 
   If GWEBSERV
 
@@ -212,33 +258,32 @@ Subprog SEL_OBJ(OBJECT, QUERY, RESPONSE)
 
     Local Char FIELDS(0)(0..1,0..1)
     Local Char ALERT_WS(0)(0..1,0..1)
-    Local Char YOPENFUNCTION(250)(4)
+    Local Char YOPENFUNCTION(250)(4) #SOLA inizializzazione array per apertura funzioni in Modale
+    Local Char YSELECTEDFIELDS(0)(1) #SOLA inizializzazione array per Selez Multi-campo
 
     #caso in cui è stata inserita una query da mobile, se il count sul filtro è maggiore di 0 printiamo i filtrati su json
     If(COUNT_CUSTOM > 0)
-      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, FILTERED_VALUES)
+      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, FILTERED_VALUES, YSELECTEDFIELDS)
 
     #caso in cui NON c'è query, printiamo l'oggetto complessivo su json
     Elsif(COUNT_VALUES > 0 & vireblc(QUERY, 2) = AVOID.ACHAR)
 
-      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, VALUES)
+      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, VALUES,YSELECTEDFIELDS)
+
     Else
       Local Char FIELDS(0)(1,1)
       Local Char HEADER(0)(1,1)
       Local Char DATA(0)(1,1)
 
-      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "Errore", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA)
+      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "Errore", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA, YSELECTEDFIELDS)
     Endif
 
     #LOG-SEL_OBJ
-
-#Call ECR_TRACE("-1-",0)From GESECRAN
-#    Gosub YAX3MOB_LOG From YAX3MUTILS_BETA
     Call YPRINT_DIR_CLB(YLOGDIRNAME,RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
     #Call YPRINT_CLB(RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
   Endif
 
-#Call FERME_TRACE From LECFIC
+Call FERME_TRACE From LECFIC
 End
 
 #########################################Selezione custom#################################################
@@ -252,118 +297,15 @@ $HANDLE_FILES
 
 Return
 
-#########################################Selezioni oggetto#################################################
-#NOTA: ad ogni nuovo oggetto di cui si ha bisogno, aggiungere un "When" con il suo codice e assegnare le tabelle associate
-# (si vedano i trt "WO_" o "WGO_")
+###########################################################################################################
+
 #**
-#*Sub per apertura tabelle (contestualmente all'oggetto in esame) usate per la Selezione (ad Oggetto)
+#*Sub per apertura tabelle e creazione LINK (contestualmente all'oggetto in esame) usate per la Selezione ad Oggetto
 #*!
 
 $GET_LINK
 
-  Case OBJECT
-    When "ITM"
-      If clalev([F:ITF])=0 : Local File ITMFACILIT [ITF] : Endif
-      If clalev([F:ITM])=0 : Local File ITMMASTER [ITM] : Endif
-      If clalev([F:ITS])=0 : Local File ITMSALES [ITS] : Endif
-      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
-      If clalev([F:AX3])=0 : Local File ATEXTRA [AX3] : Endif
-      If clalev([F:AX4])=0 : Local File ATEXTRA [AX4] : Endif
-
-      Gosub OUVFIC_LISTE From = "WO" + OBJECT
-
-      Default File "[" + OBJECT + "_]"
-
-    When "FCY"
-      If clalev([F:CPY3])=0 : Local File COMPANY [CPY3] : Endif
-      If clalev([F:FCY])=0 : Local File FACILITY [FCY] : Endif
-
-      Gosub INIT_BOITE From  = "WGO" + OBJECT
-
-      Default File "[" + OBJECT + "_]"
-
-    When "LOC"
-      If clalev([F:AFF])=0 : Local File AFCTFCY  [AFF] : Endif
-      If clalev([F:FGR])=0 : Local File FACGROUP [FGR] : Endif
-      If clalev([F:STC])=0 : Local File STOLOC [STC] : Endif
-
-      Gosub INIT_BOITE From  = "WGO" + OBJECT
-
-      Default File "[STC_]"
-
-    When "TSO"
-      If clalev([F:TSO])=0 : Local File TABSOHTYP [TSO] : Endif
-      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
-      If clalev([F:AX3])=0 : Local File ATEXTRA [AX3] : Endif
-      If clalev([F:TSD])=0 : Local File TABSDHTYP [TSD] : Endif
-
-      Gosub INIT_BOITE From  = "WGO" + OBJECT
-
-      Default File "[" + OBJECT + "_]"
-
-      # Aggiunto filtro su Categoria d'ordine a 1 (Normale) come da comportamento su funzione nativa ODV
-      Filter [F] Where [F]SOHCAT = 1
-
-    When "BPR"
-      If clalev([F:BPR])=0 : Local File BPARTNER [BPR] : Endif
-      If clalev([F:BPC])=0 : Local File BPCUSTOMER [BPC] : Endif
-      If clalev([F:BPS])=0 : Local File BPSUPPLIER [BPS] : Endif
-      If clalev([F:BPA])=0 : Local File BPADDRESS [BPA] : Endif
-
-      Gosub INIT_BOITE From  = "WGO" + OBJECT
-
-      Default File "[" + OBJECT + "_]"
-
-    When "BCG"
-      If clalev([F:BCG])=0 : Local File BPCCATEG [BCG] : Endif
-      If clalev([F:TMD])=0 : Local File TABMODELIV [TMD] : Endif
-      If clalev([F:TCU])=0 : Local File TABCUR [TCU] : Endif
-      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
-      If clalev([F:AX3])=0 : Local File ATEXTRA [AX3] : Endif
-
-      Gosub INIT_BOITE From  = "WGO" + OBJECT
-
-      Default File "[" + OBJECT + "_]"
-
-    When "SOH"
-      If clalev([F:SOH])=0 : Local File SORDER  [SOH] : Endif
-      If clalev([F:AFF])=0 : Local File AFCTFCY  [AFF] : Endif
-      If clalev([F:FGR])=0 : Local File FACGROUP [FGR] : Endif
-      If clalev([F:TSO])=0 : Local File TABSOHTYP [TSO] : Endif
-      If clalev([F:REP])=0 : Local File SALESREP [REP] : Endif
-      If clalev([F:TMD])=0 : Local File TABMODELIV [TMD] : Endif
-      If clalev([F:BPA])=0 : Local File BPADDRESS [BPA] : Endif
-
-      Gosub INIT_BOITE From  = "WGO" + OBJECT
-
-      Default File "[" + OBJECT + "_]"
-
-    When "TCY"
-      If clalev([F:TCY])=0 : Local File TABCOUNTRY [TCY] : Endif
-      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
-      If clalev([F:AX3])=0 : Local File ATEXTRA [AX3] : Endif
-      If clalev([F:AX4])=0 : Local File ATEXTRA [AX4] : Endif
-
-      Gosub INIT_BOITE From  = "WGO" + OBJECT
-
-      Default File "[" + OBJECT + "_]"
-
-    When "BPC"
-      If clalev([F:BPC])=0 : Local File BPCUSTOMER [BPC] : Endif
-      If clalev([F:BPA])=0 : Local File BPADDRESS [BPA] : Endif
-      If clalev([F:BPR])=0 : Local File BPARTNER [BPR] : Endif
-      If clalev([F:BCG])=0 : Local File BPCCATEG [BCG] : Endif
-      If clalev([F:REP])=0 : Local File SALESREP [REP] : Endif
-
-      Gosub INIT_BOITE From  = "WGO" + OBJECT
-
-      Default File "[" + OBJECT + "_]"
-
-    When Default
-
-  #qui si implementano gli oggetti standard, per eventuali oggetti custom è necessario prevedere uno script a parte
-
-  Endcase
+  Gosub GET_LINK From YAX3MWSLIBOBJECT
 
 Return
 
@@ -429,6 +371,7 @@ $SET_HEADERVALUES
       If(HEADER(INDEX_HEADER, 0)<>"actions")
         VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), evalue(COL(INDEX_HEADER)), 1)
       Else
+        #No gestione multimedia
         VALUES(INDEX_VALUES, INDEX_HEADER) =  YMEDIA(INDEX_VALUES)
       Endif
       #VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), evalue(COL(INDEX_HEADER)), 1)
@@ -475,8 +418,9 @@ End COUNT
 
 $SEL_CONS
 
-  #qui arrivo con già settatI: LNK ; critere ; count values; NUM_COLS = num
+  #qui arrivo con già settati: LNK ; Critere ; Count_values; NUM_COLS = num
   #ex INIT_GRID
+
   Local Char TIT(250)(NUM_COLS)
   Local Char COL(250)(NUM_COLS)
   Local Char FIELDS(20)(NUM_COLS)
@@ -507,20 +451,27 @@ $SEL_CONS
       Local Char YOPENFUNCTION(250)(4)
     Endif
 
+    If(type(YSELECTEDFIELDS)<0)
+      Local Char YSELECTEDFIELDS(0)(1)
+    Endif
+
     #caso in cui è stata inserita una query da mobile, se il count sul filtro è maggiore di 0 printiamo i filtrati su json
     If(COUNT_CUSTOM > 0)
-      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION, EMPTY_FIELDS, HEADER, FILTERED_VALUES)
+      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION, EMPTY_FIELDS, HEADER, FILTERED_VALUES, YSELECTEDFIELDS)
 
     #caso in cui NON c'è query, printiamo l'oggetto complessivo su json
     Elsif(COUNT_VALUES > 0 & vireblc(QUERY, 2) = AVOID.ACHAR)
 
-      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,EMPTY_FIELDS, HEADER, VALUES)
+      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,EMPTY_FIELDS, HEADER, VALUES, YSELECTEDFIELDS)
+
     #caso in cui non ci sono dati di output
     Else
       Local Char FIELDS(0)(1,1)
       Local Char HEADER(0)(1,1)
       Local Char DATA(0)(1,1)
-      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "error", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA)
+
+      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "error", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA,YSELECTEDFIELDS)
+
     Endif
   Endif
 

@@ -1,0 +1,96 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+##############################################################################
+##############################################################################
+#YCSTK: Cambio Stock
+$SER_CSTK
+
+  Gosub SET_LINK_CSTK
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_CSTK_FIELDS
+  Endif
+
+  Gosub SET_CRITERE_CSTK
+  Gosub SET_TITCOL_CSTK
+
+Return
+
+##################################################################################
+#                                 LINK
+##################################################################################
+
+#YCSTK: Cambio Stock
+$SET_LINK_CSTK
+
+   Link [YSTS] With [YITM]ITM0=[F:YSTS]ITMREF
+&              As [LNK]
+  Columns [LNK] ([F:YSTS]SERNUM,[F:YITM]ITMREF,[F:YITM]ITMDES1)
+Return
+
+##################################################################################
+#                           INIT_CRITERE_FIELDS
+##################################################################################
+#YCSTK
+$INIT_CRITERE_CSTK_FIELDS
+
+Return
+
+##################################################################################
+#                               SET_CRITERE
+##################################################################################
+
+#YCSTK
+$SET_CRITERE_CSTK
+
+  NUM_COLS = 3
+  If IS_MOBILE = 2
+
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE) Order By [F:YSTS]ITMREF
+    COUNT_VALUES = rowcount([LNK])
+
+    #sono le chiavi presenti in header e data del json di output
+    FIELDS(0) = "ITMREF" : FIELDS(1) = "ITMDES1" : FIELDS(2) = "SERNUM"
+    NBCOL = 0
+  Else
+
+    GSELFAC = 1
+    TIT(0) = "Selezione matricola"
+    ORDRE = "[F:YSTS]ITMREF"
+    START = "[F:YSTS]ITMREF"
+    DEFPAG = 1
+    NBCOL = 1
+
+    #Critere
+    Local Char CRITERE(250)
+    CRITERE = "[F:YSTS]STOFCY='"+PARAMS(0)+"'"
+    CRITERE -= "& [F:YSTS]ITMREF='"+PARAMS(1)+"'"
+  Endif
+
+Return
+
+##################################################################################
+#                               SET_TITCOL
+##################################################################################
+
+#YCSTK
+$SET_TITCOL_CSTK
+
+  NUM_COLS = 3
+  Default File [LNK]
+
+  Call TEXTFIC("STOSER","ITMREF",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YSTS]ITMREF"
+  NBCOL += 1 : Call TEXTFIC("ITMMASTER","ITMDES1",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="func AFNC.TEXTRA('ITMMASTER','DES1AXX',[F:YITM]ITMREF,'')"
+  NBCOL+=1 : Call TEXTFIC("STOSER","SERNUM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YSTS]SERNUM"
+
+Return

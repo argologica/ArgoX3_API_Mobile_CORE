@@ -1,0 +1,626 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#MC  Gestione Entrate DiversE App
+
+$ACTION
+
+#If GUSER='ADMIN' : Infbox(ACTION) : Endif
+
+  Case ACTION
+    When "OUVRE"         : Gosub OUVRE
+    When "DEBUT"         : Gosub DEBUT
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+
+Return
+
+###########################################################
+
+$OUVRE
+
+Return
+
+###########################################################
+
+$DEBUT
+
+  Call OUVRE_TRACE ("YAPP - YSMR - Gestione Entrate Diverse - " - num$(date$)) From LECFIC
+  Call ECR_TRACE("# -- Gestione Entrate Diverse --- ",0) From GESECRAN
+  Raz [M:YSMR1]
+Return
+
+###########################################################
+
+$FIN
+  Call FERME_TRACE From LECFIC
+Return
+
+#######################################################################################################################
+#**
+#* Inizializzazione - NOTA: Se la finestra è composta da più  maschere, aggiungere YCURRMSK1, YCURRMSKALIAS1,...
+#*!
+
+$INIT_FILE
+
+  Local Char YWINNAME(20): YWINNAME = "YSMR"
+  Local Char YCURRMSK(20): YCURRMSK = "YSMR1"
+  #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSK1(20): YCURRMSK1 = "<Nome1>",... ecc
+  Local Char YCURRMSKALIAS(20): YCURRMSKALIAS= "YSMR1"
+  #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSKALIAS1(20): YCURRMSKALIAS1 = "<NomeAlias1>",...ecc
+  Local Char YACTION(20)
+  Local Char YCURRFIELD(20)
+
+Return
+
+########################################################################################################################
+################################################ SUBPROG /FUNPROG ######################################################
+########################################################################################################################
+
+#=============================================== AZIONI-CAMPO ==========================================================
+#Controllo su SITO(FCY) su Anagrafica & non vuoto
+
+Subprog C_STOENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU, LOC, LOCTYP, STA, LOT, SERNUM)
+
+  Variable Char FCY
+  Variable Date IPTDAT
+  Variable Char TRSFAM
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char STU()
+  Variable Decimal QTYSTU()
+  Variable Char LOC()
+  Variable Char LOCTYP()
+  Variable Char STA()
+  Variable Char LOT()
+  Variable Char SERNUM()
+
+  Call OUVRE_TRACE("C_STOENT") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCSTOENT"
+  YCURRFIELD = "FCY"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS   #print clb: "yax3mresp", "postJson", "init"
+
+  #business logic
+  IPTDAT = date$
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"IPTDAT") From YAX3MUTILS
+
+  Local File FACILITY [F:YFCY]
+  Read [F:YFCY]FCY0 = FCY
+  If fstat
+    mkstat = 2
+    YMESSAGE = "ATTENZIONE! Sito inesistente!"
+    Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+  Else
+    mkstat = 0
+    Call YAX3MOB_ECRTRACE(mkstat,"Sito in anagrafica") From  YAX3MUTILS     #log
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS   #print clb: "yresponse", "end"
+  Call FERME_TRACE From LECFIC
+End
+
+###############################################################################################################################
+
+Subprog AM_ITRENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU, LOC, LOCTYP, STA, LOT, SERNUM)
+
+  Variable Char FCY
+  Variable Date IPTDAT
+  Variable Char TRSFAM
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char STU()
+  Variable Decimal QTYSTU()
+  Variable Char LOC()
+  Variable Char LOCTYP()
+  Variable Char STA()
+  Variable Char LOT()
+  Variable Char SERNUM()
+
+  Local File STOLOC [F:YSTC]
+  Local File ITMMASTER [F:YITM]
+  Local File ITMFACILIT [F:YITF]
+  Local Char YITMREF(20)
+
+  Call OUVRE_TRACE("AM_ITRENT") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YAMITRENT"
+  YCURRFIELD = "ITMREF"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Call YSTRVALEUR(ITMREF,YITMREF,CURRENTROW) From YAX3MUTILS
+  Columns [F:YITF](DEFLOC)
+  Read [F:YITF]ITF0 = YITMREF;FCY
+  #Read [F:YITF]ITF0 = ITMREF(CURRENTROW);FCY
+
+  If fstat
+    mkstat=2
+    YMESSAGE="ATTENZIONE! Cod. Articolo non associato al sito o inesistente!"
+    Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS    #log
+  Else
+    Columns [F:YSTC](LOCTYP)
+    Read [F:YSTC]STC0=FCY;[F:YITF]DEFLOC
+    #se l'articolo ha un ubicazione di default settiamo in automatico lo stato A, altrimenti lo fa l'azione campo sull'ubicazione
+    If fstat=0
+      LOC(CURRENTROW) = [F:YITF]DEFLOC
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOC",CURRENTROW) From YAX3MUTILS
+      LOCTYP(CURRENTROW) = [F:YSTC]LOCTYP
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOCTYP",CURRENTROW) From YAX3MUTILS
+      STA(CURRENTROW) = "A" #stato articolo settato così per semplicità
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STA",CURRENTROW) From YAX3MUTILS
+    Endif
+
+    Columns [F:YITM](ITMDES1,SERMGTCOD,LOTMGTCOD,STU)
+    Read [F:YITM]ITM0 = YITMREF
+
+    If fstat
+      mkstat=2
+      YMESSAGE="ATTENZIONE! Cod. Articolo inesistente!"
+      Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+    Else
+      mkstat =0
+
+      STU(CURRENTROW) = [F:YITM]STU
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STU",CURRENTROW) From YAX3MUTILS
+      #Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, [F:YITM]ITMDES1,CURRENTROW) From YAX3MUTILS
+
+      #Gestione a matricola, qta forzata a 1
+      If([F:YITM]SERMGTCOD=3)
+        QTYSTU(CURRENTROW)=1
+        Call YAX3MOB_DISZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"QTYSTU",CURRENTROW) From YAX3MUTILS
+        Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"QTYSTU",CURRENTROW) From YAX3MUTILS
+      Else
+        Call YAX3MOB_DISZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"SERNUM",CURRENTROW) From YAX3MUTILS
+      Endif
+
+      #Gestione NON a lotto, disabilito il campo lotto
+      If([F:YITM]LOTMGTCOD < 2)
+        Call YAX3MOB_DISZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"LOT",CURRENTROW) From YAX3MUTILS
+      Endif
+      Call YAX3MOB_ECRTRACE(mkstat,"Articolo in anagrafica") From  YAX3MUTILS     #log
+
+    Endif
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+########################################################################################################################
+Subprog C_QTSTENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU, LOC, LOCTYP, STA, LOT, SERNUM)
+
+  Variable Char FCY
+  Variable Date IPTDAT
+  Variable Char TRSFAM
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char STU()
+  Variable Decimal QTYSTU()
+  Variable Char LOC()
+  Variable Char LOCTYP()
+  Variable Char STA()
+  Variable Char LOT()
+  Variable Char SERNUM()
+
+  Call OUVRE_TRACE("C_QTSTENT") From LECFIC
+  Local Decimal YQTYSTU
+
+  Gosub INIT_FILE
+  YACTION = "YCQTSTENT"
+  YCURRFIELD = "QTYSTU"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Call YDECVALEUR(QTYSTU,YQTYSTU,CURRENTROW) From YAX3MUTILS
+  If(YQTYSTU = 0)
+    mkstat =2
+    YMESSAGE = "ATTENZIONE! Quantità inserita nulla!"
+    Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MUTILS     #log
+  Else
+    Call YAX3MOB_ECRTRACE(mkstat,"Quantità imputata > 0") From YAX3MUTILS     #log
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+#############################################################################################################################
+# C -- Controllo su Ubicazione(LOC) su Anagrafica & valorizzazione campi: LOCTYP, STA
+
+Subprog C_LOCENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU, LOC, LOCTYP, STA, LOT, SERNUM)
+
+  Variable Char FCY
+  Variable Date IPTDAT
+  Variable Char TRSFAM
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char STU()
+  Variable Decimal QTYSTU()
+  Variable Char LOC()
+  Variable Char LOCTYP()
+  Variable Char STA()
+  Variable Char LOT()
+  Variable Char SERNUM()
+
+  Local File ITMFACILIT [F:YITF]
+  Local File STOLOC [F:YSTC]
+  Local File ITMMASTER [F:YITM]
+  Local Char YLOC(10)
+
+  Call OUVRE_TRACE("C_LOCENT") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCLOCENT"
+  YCURRFIELD = "LOC"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Call YSTRVALEUR(LOC,YLOC,CURRENTROW) From YAX3MUTILS
+  Columns [F:YSTC](LOCTYP)
+  Read [F:YSTC]STC0 = FCY;YLOC
+
+  If(fstat = 0)
+    #loctyp,sta
+    LOCTYP(CURRENTROW)= [F:YSTC]LOCTYP
+    STA(CURRENTROW) = "A"
+    #LOT,SERNUM (dipendono da ITMREF: già imputato)
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOCTYP",CURRENTROW) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STA",CURRENTROW) From YAX3MUTILS
+    Call YAX3MOB_ECRTRACE(mkstat,"Ubicazione in anagrafica") From YAX3MUTILS     #log
+  Else
+    mkstat =2
+    YMESSAGE = "ATTENZIONE! Ubicazione non trovata!"
+    Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE, CURRENTROW) From YAX3MUTILS
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MUTILS    #log
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#############################################################################################################################
+#C- Controllo: se gestione a Lotto, campo non vuoto
+
+Subprog C_LOTENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU, LOC, LOCTYP, STA, LOT, SERNUM)
+
+  Variable Char FCY
+  Variable Date IPTDAT
+  Variable Char TRSFAM
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char STU()
+  Variable Decimal QTYSTU()
+  Variable Char LOC()
+  Variable Char LOCTYP()
+  Variable Char STA()
+  Variable Char LOT()
+  Variable Char SERNUM()
+
+  Call OUVRE_TRACE("C_LOTENT") From LECFIC
+  Local Char YLOT(15)
+  Gosub INIT_FILE
+  YACTION = "YCLOTENT"
+  YCURRFIELD = "LOT"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Call YSTRVALEUR(LOT,YLOT,CURRENTROW) From YAX3MUTILS
+  If(vireblc(YLOT,2) = AVOID.ACHAR)
+   mkstat =2
+   YMESSAGE = "Attenzione! Lotto obbligatorio."
+   Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+   Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+  Else
+    mkstat=0
+    Call YAX3MOB_ECRTRACE(mkstat,"Lotto inserito") From  YAX3MUTILS     #log
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+##############################################################################################################################
+#C-- Controllo Matricola (se prevista la sua gestione)(SERNUM): NO Inserimento Matricola già esistente in anagrafica
+
+Subprog C_SERNENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU, LOC, LOCTYP, STA, LOT, SERNUM)
+
+  Variable Char FCY
+  Variable Date IPTDAT
+  Variable Char TRSFAM
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char STU()
+  Variable Decimal QTYSTU()
+  Variable Char LOC()
+  Variable Char LOCTYP()
+  Variable Char STA()
+  Variable Char LOT()
+  Variable Char SERNUM()
+
+  Local File STOSER [F:YSTS]
+  Local Char YSERNUM(20)
+
+  Call OUVRE_TRACE("C_SERNENT") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCSERNENT"
+  YCURRFIELD = "SERNUM"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic:Controllo se già presente la matricola in Anagrafica
+  Call YSTRVALEUR(SERNUM,YSERNUM,CURRENTROW) From YAX3MUTILS
+  If(vireblc(YSERNUM,2) = AVOID.ACHAR)
+    mkstat=2
+    YMESSAGE = "ATTENZIONE! Matricola obbligatoria per l'art. "-ITMREF(CURRENTROW)-"!"
+    Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+  Else
+    Columns [F:YSTS](SERNUM)
+    Read [F:YSTS]STS0 = [L]ITMREF(CURRENTROW);YSERNUM
+
+    If(fstat =0)
+      mkstat=2
+      YMESSAGE = "ATTENZIONE! Matricola già esistente, inserirne una nuova!"
+      Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+    Else
+      mkstat=0
+      Call YAX3MOB_ECRTRACE(mkstat,"Matricola inserità e non già in anagrafica") From  YAX3MUTILS    #log
+    Endif
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#####################################################################################################################
+#**
+#* Controllo Validità LOC - Gestione "*" nel campo LOC, ritorna booleano
+#* @param YFCY Sito
+#* @param YLOC Ubicazione
+#*!
+Funprog YVALIDATELOC(YFCY,YLOC)
+
+  Value Char YFCY
+  Value Char YLOC
+  Local File STOLOC [F:YSTC]
+
+  Columns [F:YSTC](LOC)
+  Read [F:YSTC]STC0 = YFCY;YLOC
+End fstat
+
+#========================================================================================================================
+#============================================ AZIONI-BOTTONE ============================================================
+
+Subprog YCREA_ENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU, LOC, LOCTYP, STA, LOT, SERNUM)
+
+  Variable Char FCY
+  Variable Date IPTDAT
+  Variable Char TRSFAM
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char STU()
+  Variable Decimal QTYSTU()
+  Variable Char LOC()
+  Variable Char LOCTYP()
+  Variable Char STA()
+  Variable Char LOT()
+  Variable Char SERNUM()
+
+  Local Integer K, YSUCCESS : YSUCCESS = 0
+
+  #apertura traccia
+  Call OUVRE_TRACE("YCREA_ENT") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCREAENT"
+  YCURRFIELD = ""
+
+  #init
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
+  #parametrizzazioni iniziali :
+  YFUNC_NAME = "YSMR" : YFUNC_TYPE = "DOC" : YIMP_CODE="YSMRU" : YMEX_DOCTYPE = "Entrata Diversa"
+
+  #business logic
+  If(YIMP_CODE="YSMR")
+    Gosub YFILL_YSMRCSV
+  Endif
+  If(YIMP_CODE="YSMRU")
+    Gosub YFILL_YSMRUCSV
+  Endif
+
+  #Call YPRINT_CLB(YCSVTEXT,YFUNC_NAME, "csv") From YUTILS  #stampo csv(opzionale)
+  Call YPRINT_DIR_CLB(YLOGDIRNAME, YCSVTEXT, YFUNC_NAME, "csv") From YUTILS
+  #Check correttezza codice Modello import impostato?
+
+  If dim(GYVCRENT)<0
+    Global Char GYVCRENT(20)
+  Endif
+  Raz GYVCRENT
+
+  Call YAX3MOB_IMPORTSIL(YIMP_CODE, YCSVTEXT, YSUCCESS, YMESSAGE) From YAX3MUTILS
+
+  If (vireblc(GYVCRENT,2)= AVOID.ACHAR)
+    YMESSAGE = func YUTILS.IIF(YMESSAGE = AVOID.ACHAR, "Movimento di entrata fallito! Impossibile proseguire!", YMESSAGE)
+    Call YAX3MOB_ECRTRACE(2,YMESSAGE) From  YAX3MUTILS           #log
+    YSUCCESS=1
+  Else
+    YMESSAGE = "Entrata diversa ("-GYVCRENT-")avvenuta con successo!"
+    Call YAX3MOB_ECRTRACE(0,YMESSAGE) From YAX3MUTILS
+  Endif
+  YALERT_MESSAGE -= YMESSAGE
+
+  If YSUCCESS = 1
+    Call YAX3MOB_SHOWALERT(2, YALERT_TYPE, YALERT_MESSAGE) From YAX3MUTILS
+  Else
+    Raz FCY, IPTDAT
+    For K = 0 To func YUTILS.COUNT(ITMREF) - 1
+      Raz ITMREF(K),STU(K),QTYSTU(K),LOC(K),LOCTYP(K),STA(K),LOT(K),SERNUM(K) #dettaglio
+    Next
+
+    Call YAX3MOB_SHOWALERT(1, YALERT_TYPE, YALERT_MESSAGE) From YAX3MUTILS
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#############################################################################################################
+#**
+#* Sub per riempimento testo csv per modello di Import YSMR
+#*!
+
+$YFILL_YSMRCSV
+
+  #INIZIO creaz csv
+  Call YAX3MOB_APPEND(YCSVTEXT, "E", 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, FCY, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, format$("D:YYYYMMDD",IPTDAT), 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, "Entrata ArgoX3M", 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, TRSFAM, 1) From YAX3MUTILS
+
+#  Call YAX3MOB_APPEND(YCSVTEXT, "mc", 0) From YAX3MUTILS  #creusr
+#  Call YAX3MOB_APPEND(YCSVTEXT, "mc", 1) From YAX3MUTILS  #updusr
+
+  Local Integer I,J : I = 0 : J = 0
+
+  For I=0 To func YUTILS.COUNT(ITMREF) - 1
+    # Row L
+    Call YAX3MOB_APPEND(YCSVTEXT, "L", 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, ITMREF(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, STU(I), 0) From YAX3MUTILS           #CI METTO SU PCU IL VALORE DI STU
+    Call YAX3MOB_APPEND(YCSVTEXT, num$(QTYSTU(I)), 0) From YAX3MUTILS  #CI METTO SU QTYPCU IL VALORE DI QTYSTU
+    Call YAX3MOB_APPEND(YCSVTEXT, STU(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, num$(QTYSTU(I)), 0) From YAX3MUTILS  #CI METTO SU QTYPCU IL VALORE DI QTYSTU
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 1) From YAX3MUTILS
+
+#    Call YAX3MOB_APPEND(YCSVTEXT, "mc", 0) From YAX3MUTILS  #creusr
+#    Call YAX3MOB_APPEND(YCSVTEXT, "mc", 1) From YAX3MUTILS  #updusr
+
+    # Row S
+    Call YAX3MOB_APPEND(YCSVTEXT, "S", 0)  From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, STU(I), 0)  From YAX3MUTILS          #CI METTO SU PCU IL VALORE DI STU
+    Call YAX3MOB_APPEND(YCSVTEXT, num$(QTYSTU(I)), 0) From YAX3MUTILS  #CI METTO SU QTYPCU IL VALORE DI QTYSTU
+    Call YAX3MOB_APPEND(YCSVTEXT, LOC(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, LOT(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, STA(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, TRSFAM, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, SERNUM(I), 1) From YAX3MUTILS
+
+#    Call YAX3MOB_APPEND(YCSVTEXT, "mc", 0) From YAX3MUTILS  #creusr
+#    Call YAX3MOB_APPEND(YCSVTEXT, "mc", 1) From YAX3MUTILS  #updusr
+  Next
+  #FINE creaz csv
+Return
+
+############################################################################
+
+$YFILL_YSMRUCSV
+
+  #INIZIO creaz csv
+  Call YAX3MOB_APPEND(YCSVTEXT, "E", 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, FCY, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, format$("D:YYYYMMDD",IPTDAT), 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, "Entrata ArgoX3M", 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, TRSFAM, 0) From YAX3MUTILS
+
+  Call YAX3MOB_APPEND(YCSVTEXT, "mc", 0) From YAX3MUTILS  #creusr
+  Call YAX3MOB_APPEND(YCSVTEXT, "mc", 1) From YAX3MUTILS  #updusr
+
+  Local Integer I,J : I = 0 : J = 0
+
+  For I=0 To func YUTILS.COUNT(ITMREF) - 1
+    # Row L
+    Call YAX3MOB_APPEND(YCSVTEXT, "L", 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, ITMREF(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, STU(I), 0) From YAX3MUTILS           #CI METTO SU PCU IL VALORE DI STU
+    Call YAX3MOB_APPEND(YCSVTEXT, num$(QTYSTU(I)), 0) From YAX3MUTILS  #CI METTO SU QTYPCU IL VALORE DI QTYSTU
+    Call YAX3MOB_APPEND(YCSVTEXT, STU(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, num$(QTYSTU(I)), 0) From YAX3MUTILS  #CI METTO SU QTYPCU IL VALORE DI QTYSTU
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+
+    Call YAX3MOB_APPEND(YCSVTEXT, "mc", 0) From YAX3MUTILS  #creusr
+    Call YAX3MOB_APPEND(YCSVTEXT, "mc", 1) From YAX3MUTILS  #updusr
+
+    # Row S
+    Call YAX3MOB_APPEND(YCSVTEXT, "S", 0)  From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, STU(I), 0)  From YAX3MUTILS          #CI METTO SU PCU IL VALORE DI STU
+    Call YAX3MOB_APPEND(YCSVTEXT, num$(QTYSTU(I)), 0) From YAX3MUTILS  #CI METTO SU QTYPCU IL VALORE DI QTYSTU
+    Call YAX3MOB_APPEND(YCSVTEXT, LOC(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, LOT(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, STA(I), 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, TRSFAM, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, SERNUM(I), 0) From YAX3MUTILS
+
+    Call YAX3MOB_APPEND(YCSVTEXT, "mc", 0) From YAX3MUTILS  #creusr
+    Call YAX3MOB_APPEND(YCSVTEXT, "mc", 1) From YAX3MUTILS  #updusr
+  Next
+  #FINE creaz csv
+Return
+######################################################################################
+## Etichetta aggiunta dal supervisore (videata YSMR1) 02/07/2025 18:18:05 (ARG01)
+######################################################################################
+Subprog IB_ITMREF
+End
+
+
+######################################################################################

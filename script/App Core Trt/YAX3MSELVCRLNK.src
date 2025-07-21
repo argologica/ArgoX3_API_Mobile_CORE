@@ -1,0 +1,109 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+############################################################################################################################################
+#**
+#* Sub per Link,Critere,Griglia per VCRNUM (YVXRUNI)
+#*!
+
+$VCR_VXRUNI
+
+#  Link [YSTC] With [YFCY]FCY0~=[YSTC]STOFCY,
+#&                  [YITF]ITF0~=PARAMS(0);[YFCY]FCY
+#&             As   [LNK]
+#  Columns [LNK] ( [F:YITF]STOFCY,[F:YFCY]FCYNAM,[F:YITF]ITMREF,[F:YSTC]LOC,[F:YSTC]OCPCOD,[F:YSTC]LOCTYP,[F:YSTC]LOCCAT,[F:YSTC]LOKSTA )
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_VXRUNI_FIELDS
+  Endif
+
+  Gosub SET_CRITERE_VXRUNI
+  Gosub SET_TITCOL_VXRUNI
+
+Return
+
+#########################################################################################################################################
+#                                                         LINK
+#########################################################################################################################################
+#**
+#* Link per Selezione VCRNUM - YVXRUNI
+#*!
+$LINK_VXRUNI
+
+  Link [YMFG] With [YMWH]MWH0=10;[YMFG]MFGNUM
+&             As [LNK]
+Return
+
+#########################################################################################################################################
+#                                                       SET_TITCOL
+#########################################################################################################################################
+#**
+#* Imposto Titoli e Colonne per Selezione VCRNUM - YVXRUNI
+#*!
+$SET_TITCOL_VXRUNI
+
+#  NUM_COLS = 6
+#  Default File [LNK]
+#
+#  Call TEXTFIC("FACILITY","FCY",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YITF]STOFCY"
+#  NBCOL += 1 : Call TEXTFIC("FACILITY","FCYNAM",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YFCY]FCYNAM"
+#  NBCOL += 1 : Call TEXTFIC("STOLOC","LOC",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YSTC]LOC"
+#  NBCOL += 1 : Call TEXTFIC("STOLOC","OCPCOD",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "mess([F:YSTC]OCPCOD,757,1)"
+#  NBCOL += 1 : Call TEXTFIC("TABLOCTYP","LOCTYP",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "func AFNC.TEXTRA('TABLOCTYP','TYPDESAXX',[F:YITF]STOFCY,[F:YSTC]LOCTYP)"
+#  NBCOL += 1 : Call TEXTFIC("STOLOC","LOCCAT",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "mess([F:YSTC]LOCCAT,2710,1)"
+
+Return
+
+##################################################################################################################
+#                                             CRITERE FIELDS
+##################################################################################################################
+
+$INIT_CRITERE_VXRUNI_FIELDS
+#  Local Char FCY(5)
+#  Local Char ITMREF(20)
+#
+#  FCY = [M:YSMR1]FCY
+#  ITMREF = [M:YSMR1]ITMREF(nolign-1)
+Return
+
+###############################################################################################################
+#                                               SET_CRITERE
+###############################################################################################################
+
+$SET_CRITERE_VXRUNI
+
+  #NUM_COLS = 6
+  If IS_MOBILE = 2
+    Gosub INIT_GRID
+
+    Filter [LNK] Where evalue(CRITERE)
+    COUNT_VALUES = rowcount([LNK])
+
+    #sono le chiavi presenti in header e data del json di output
+#    FIELDS(0) = "FCY" : FIELDS(1) = "FCYNAM" : FIELDS(2) = "LOC"
+#    FIELDS(3) = "OCPCOD" : FIELDS(4) = "LOCTYP" : FIELDS(5) = "LOCCAT"
+    NBCOL = 0
+  Else
+    GSELFAC = 1
+    TIT(0) = "Selezione VCRNUM"
+#    ORDRE = "[F:YITF]STOFCY;[F:YSTC]LOC"
+#    START = "[F:YSTC]LOC"
+#    DEFPAG = 1
+#    NBCOL = 1
+#
+#    Local Char CRITERE(250)
+#    CRITERE = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YSTC]LOKSTA <> 2"
+
+  Endif
+Return

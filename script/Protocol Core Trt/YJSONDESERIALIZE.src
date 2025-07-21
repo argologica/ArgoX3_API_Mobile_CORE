@@ -1,5 +1,8 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
-#<AdxTL>@(#)0.0.0.0 $Revision$
+#################################################################################################################################
+#                                             LIBRERIA PER DESERIALIZZAZIONE
+#################################################################################################################################
+
 Subprog JSONPARSE(YBODY, YRESPONSE)
   Variable Clbfile YBODY
   Variable Char YRESPONSE()(,)
@@ -27,7 +30,7 @@ Subprog JSONPARSE_CLB(YDOC, PPROGRESS, YELEMENTTREE, YELECOUNTER, WERRMSG, YRESP
 
   Local Char YA_STATUS(20)
   Local Char YCURR_ELEMENT_NAME(50)
-  Local Char YCURR_ELEMENT_VALUE(50)
+  Local Char YCURR_ELEMENT_VALUE(250)
   Local Integer INTERRUPT
 
   Local Integer IN_STRING
@@ -479,7 +482,7 @@ Subprog YJSON2ARRAY(YBODY, YCURRENTUSER, YFIELDS)
   Local Char YRESPONSE(250)(2600,2)
 
   Local Integer YI,YJ: YJ=-1
-  Local Char YPATH(250),YVALUE(50),YJSON_KEY(20),YTURN_LEAF(20)
+  Local Char YPATH(250),YVALUE(250),YJSON_KEY(20),YTURN_LEAF(20)
 
   Local Char YTFIELD(11): YTFIELD = AVOID.ACHAR                     #nome 1° campo di dett
   Local Integer YRI:YRI=-1

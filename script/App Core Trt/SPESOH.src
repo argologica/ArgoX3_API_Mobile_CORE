@@ -1,0 +1,17 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+  Case ACTION
+    When "APRES_CRE", "APRES_MOD" : Gosub APRES_ALL
+    When Default
+  Endcase
+Return
+
+###################################################
+
+$APRES_ALL
+
+  If dim(GYVCRSOH)>0
+    GYVCRSOH = [M:SOH0]SOHNUM
+  Endif
+
+Return

@@ -1,4 +1,8 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
+#######################################################################################################################
+#                                                   LIBRERIA PER SERIALIZZAZIONE
+#######################################################################################################################
+
 ##Caratteri json
 Funprog GET_OPENCURLYBRACKET()
 End chr$(123) #{
@@ -494,9 +498,22 @@ End YRESULT
 
 
 ###################################################################################
+#**
+#* Funzione per generare Json di Risposta (clob) con varie azioni: Alert, Apertura Modale, Modifica campi videata, Selezione, Selezione multi campo
+#*
+#* @param SUCCESS_VALUE  Intero(Booleano)
+#* @param ALERT_TYPE Tipo di Alert(toast,info,error, warning)
+#* @param ALERT_MESSAGE Messaggio da visualizzare nell'Alert
+#* @param ALERT_WS  Lista degli Eventuale/i Web service lanciato all'alert
+#* @param OPENFUNCTION Lista delle Funzioni lanciabili in maniera modale
+#* @param FIELDS Matrice dei campi di videata e loro proprietà
+#* @param HEADER Chiavi(campi)da visualizzare in selezione
+#* @param DATA Dati(campi)da visualizzare in selezione
+#* @param SELECTEDFIELDS Lista dei campi da valorizzare in Selezione(Selezione con valorizzazione multi-campo)
+#*!
 
-#Funprog per creare json con anche grid
-Funprog GENERATE_JSON(SUCCESS_VALUE, ALERT_TYPE, ALERT_MESSAGE, ALERT_WS, OPENFUNCTION, FIELDS, HEADER, DATA)
+Funprog GENERATE_JSON(SUCCESS_VALUE, ALERT_TYPE, ALERT_MESSAGE, ALERT_WS, OPENFUNCTION, FIELDS, HEADER, DATA, SELECTEDFIELDS)
+
   Value Integer SUCCESS_VALUE
   Value Char ALERT_TYPE
   Value Char ALERT_MESSAGE
@@ -505,6 +522,7 @@ Funprog GENERATE_JSON(SUCCESS_VALUE, ALERT_TYPE, ALERT_MESSAGE, ALERT_WS, OPENFU
   Value Char FIELDS()(,)
   Value Char HEADER()(,)
   Value Char DATA()(,)
+  Value Char SELECTEDFIELDS()()
 
   Local Clbfile JSON_RESULT(14)
 
@@ -696,9 +714,10 @@ Funprog GENERATE_JSON(SUCCESS_VALUE, ALERT_TYPE, ALERT_MESSAGE, ALERT_WS, OPENFU
     Local Clbfile GRID_DETAILS_TEXT(1)
     GRID_DETAILS_TEXT = func GET_CLBOBJ("details", GRID_ITEMS, 0, 1)
 
-    Local Clbfile GRID_OBJ(1)(2)
+    Local Clbfile GRID_OBJ(1)(3)
     GRID_OBJ(0) = func GET_STR("type", "grid", 1)
-    GRID_OBJ(1) = GRID_DETAILS_TEXT
+    GRID_OBJ(1) = func GET_STRLST("selectionFields", SELECTEDFIELDS, 1)  #chiave-valore per campi aggiuntivi (Selezione multi campo)
+    GRID_OBJ(2) = GRID_DETAILS_TEXT
 
     ACTION_ITEMS(ACTION_INDEX)= func GET_CLBOBJ(AVOID.ACHAR, GRID_OBJ, 1, 1)
 

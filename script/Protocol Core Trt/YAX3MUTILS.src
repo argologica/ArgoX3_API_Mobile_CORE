@@ -42,6 +42,7 @@ $YAX3MOB_INIT_ACTIONFIELD
     Local Char YALERT_WS(50)(1..3,1..3)
     Local Char YHEADER(0)(1,1)
     Local Char YDATA(0)(1,1)
+    Local Char YSELECTEDFIELDS(0)(1) #Array per Selez Multi Campo,solo inizializzato
     Const Integer YMAXFLDCOUNT: YMAXFLDCOUNT = 300
 
     #Modalità MODIFICA
@@ -1180,7 +1181,8 @@ $YAX3MOB_END_ACTIONFIELD
     Endif
 
     Gosub YAX3MOB_GLOBALSET
-    YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
+    YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA,YSELECTEDFIELDS)
+    #YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
   Endif
 
   #LOG (END):
@@ -1205,7 +1207,8 @@ $YAX3MOB_END_ACTIONFIELD_NOFOCUS
     Endif
 
     Gosub YAX3MOB_GLOBALSET_NOFOCUS
-    YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
+    YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA,YSELECTEDFIELDS)
+    #YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
   Endif
 
   #LOG (END):
@@ -1293,7 +1296,8 @@ $YAX3MOB_END_BUTTONACTION
         Call YAX3MOB_PRINT_YFIELDS("end", YFIELDS, YACTION-"- row"-num$(CURRENTROW))
       Endif
 
-      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
+      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA,YSELECTEDFIELDS)
+      #YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
 
       #LOG YRESPONSE
       Call YPRINT_CLB(YRESPONSE, "YRESPONSE_" + YACTION, "json") From YUTILS
@@ -1859,6 +1863,78 @@ End
 
 ########################################################################################################
 #**
+#* Gestione della label (Solo lato Mobile)
+#*
+#* @param YFIELDS Matrice dei campi
+#* @param YFIELDCODE Codice del campo a cui applicare la label
+#* @param YMKSTAT Intero(booleano) per tipologia di label (rossa(errore)/blu(informativa))
+#* @param YMESS Messaggio da visualizzare nella label
+#* @param CURRENTROW Riga corrente
+#*!
+
+Subprog YAX3MOB_SETLABEL(YFIELDS,YFIELDCODE,YMKSTAT,YMESS,CURRENTROW)
+
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer YMKSTAT
+  Value Char YMESS
+  Value Integer CURRENTROW
+
+  If(GWEBSERV)
+    Const Integer YCOL_MEX : YCOL_MEX= 4
+    Local Integer YK: YK = func YUTILS.FIND_ITEM(YFIELDS, YFIELDCODE)
+
+    If (YK >= 0)
+       If(YFIELDS(YK,8)="0")#testata
+        YFIELDS(YK, YCOL_MEX) = YMESS  #mex
+       Else
+        Local Integer YI : YI = func YUTILS.FIND_MULTITEM(YFIELDS, YFIELDCODE,CURRENTROW)
+        YFIELDS(YI, YCOL_MEX) = YMESS  #mex
+       Endif
+    Else
+      Call ECR_TRACE("Campo" - YFIELDCODE - "non trovato!", 0) From GESECRAN
+    Endif
+  Endif
+End
+
+#################################################################################
+#**
+#* Funzione per pulire Label di un campo (YFIELDCODE) [funzionalità solo lato Mobile]
+#*
+#* @param YFIELDS Matrice dei campi di videata
+#* @param YFIELDCODE Codice campo di cui pulire la label
+#* @param CURRENTROW Riga
+#*!
+Subprog YAX3MOB_RAZLABEL(YFIELDS,YFIELDCODE,CURRENTROW)
+
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer CURRENTROW
+  Call YAX3MOB_SETLABEL(YFIELDS,YFIELDCODE,0,AVOID.ACHAR,CURRENTROW)
+End
+
+#################################################################################
+#**
+#* Funzione per pulire tutti messaggi/label lato Mobile
+#*
+#* @param YFIELDS Matrice dei campi di videata
+#*!
+
+Subprog YAX3MOB_RAZMESSAGES(YFIELDS)
+
+  Variable Char YFIELDS()(,)
+  Local Integer YI
+  Const Integer YCOL_MEX : YCOL_MEX = 4
+
+  If(GWEBSERV)
+    For YI =0 To dim(YFIELDS,1)-1
+      YFIELDS(YI, YCOL_MEX) = AVOID.ACHAR  #mex/label
+    Next
+  Endif
+End
+
+########################################################################################################
+#**
 #* Gestione messaggio dell'azione campo - X3/AX3M
 #*
 #* @param YFIELDS  matrice dei campi (lato X3: SOLO parametro formale)
@@ -2339,20 +2415,22 @@ $YAX3MOB_SET_HEADERLOG
 
   For [F:YATR]
     YPARAM = evalue("[F:YATR]CODPAR")    #codice parametro
-    YDIME = func YGET_DIME(func YAX3MUTILS.YGET_SUBPRGNAME(YACTION),YPARAM)
+    YDIME = func YGET_DIMEPARAM(func YAX3MUTILS.YGET_SUBPRGNAME(YACTION),YPARAM)
     YPOS = func YUTILS.IIF(CURRENTROW = -1, 0, CURRENTROW)
 
     If(YDIME=1)
       YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM))) #val param
     Else
-      If(YPARAM = YCURRFIELD)
-        If(!GWEBSERV)
-          YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(0)+")")))
+      If(YDIME >1)
+        If(YPARAM = YCURRFIELD)
+          If(!GWEBSERV)
+            YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(0)+")")))
+          Else
+            YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(YPOS)+")")))
+          Endif
         Else
           YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(YPOS)+")")))
         Endif
-      Else
-        YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(YPOS)+")")))
       Endif
     Endif
 
@@ -2442,7 +2520,7 @@ End
 #                                                    UTILITà PER ANAGRAFICA X3
 ##################################################################################################################
 #**
-#* Metodo per estrarre sottoprogramma da azione
+#* Metodo per estrarre codice Sottoprogramma (X3) dato codice Azione in anagrafica
 #*
 #* @param YACTION Codice azione
 #*!
@@ -2462,8 +2540,13 @@ Funprog YGET_SUBPRGNAME(YACTION)
 End YSUBPRGNAME
 
 ######################################################################################
-
-Funprog YGET_DIME(YSUBPRGNAME, YFIELDCODE)
+#**
+#* Metodo per determinare la dimensione di un Parametro di un Sottoprogramma di X3
+#*
+#* @param YSUBPRGNAME Codice del Sottoprogramma di X3
+#* @param YFIELDCODE  Codice del parametro del Sottoprogramma
+#*!
+Funprog YGET_DIMEPARAM(YSUBPRGNAME, YFIELDCODE)
 
   Value Char YSUBPRGNAME
   Value Char YFIELDCODE
