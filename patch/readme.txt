@@ -4,6 +4,8 @@ Nel core terremo la pathc con tutti le funzionalità, ma salveremo nella repo de
 
 - inserire a mano i campi delle Tabelle Standard:AMSKZON, ACTPAR:rispettivamente YVISBLOC YSCANMODE,YSENDAX3M  [?]
 - inserire a mano i campi delle Videate Standard:AMK1,AMK2, ACT:rispettivamente YVISBLOC YSCANMODE,YSENDAX3M [?]
+- creare una patch monografica (modalità "standard") per i trt (di core)
+- creare Servizio REST
 
 
 
