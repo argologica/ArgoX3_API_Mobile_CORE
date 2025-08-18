@@ -1,5 +1,78 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
 #########################################################################################
+Subprog YUPSERT_USR(YUSERNAME, YX3USERNAME, YNOMUSR, YEMAIL, YENAFLG, YHASH, YSALT, YRESPONSE)
+
+  Variable Char YUSERNAME
+  Variable Char YX3USERNAME
+  Variable Char YNOMUSR
+  Variable Char YEMAIL
+  Variable Integer YENAFLG
+  Variable Char YHASH
+  Variable Char YSALT
+
+  Variable Clbfile YRESPONSE
+
+  Local File YAX3MUSER [F:YAX3MU]
+  Local Integer YI
+  Local Char YPASSWORD(50)
+  Local Char YKEYVALUES(250)(2,3)
+  Local Char YCREDENTIALS(250)(2)
+  Local Char PCOD(100)(1), PVAL(100)(1)
+  Local Char YRESPONSE_ARR(250)(func YJSONDESERIALIZE.F_MAXELEMENT(), func YJSONDESERIALIZE.F_DEEPLEVEL() + 1)
+  Local Clbfile YRESPONSE_JSON(1), YBODY(1)
+  Local Integer EXIST_USER : EXIST_USER = 0
+
+  Call OUVRE_TRACE ("YAX3MUSR - Creazione/Aggiornamento Utente ArgoX3 Mobile" - num$(date$)) From LECFIC
+
+  Trbegin [F:YAX3MU]
+  Readlock [F:YAX3MU]YAX3MU0 = YUSERNAME
+  EXIST_USER = func YUTILS.IIF(fstat = 0, 1, 0)
+
+  # Insert record into table
+  [F:YAX3MU]USERNAME     = YUSERNAME
+  [F:YAX3MU]X3USERNAME   = YX3USERNAME
+  [F:YAX3MU]NOMUSR       = YNOMUSR
+  [F:YAX3MU]EMAIL        = YEMAIL
+  [F:YAX3MU]ENAFLG       = YENAFLG # da API
+  [F:YAX3MU]PASSWORDHASH = YHASH
+  [F:YAX3MU]PASSWORDSALT = YSALT
+
+  Local Integer YOPERATION : YOPERATION = 1
+  #non esiste l'utente
+  If EXIST_USER <> 1
+    Write [F:YAX3MU]
+  Else
+    Rewrite [F:YAX3MU]
+  Endif
+
+  If fstat
+    YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+    YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+  Else
+    Gosub GET_WS_CONSTANTS From YUTILS
+    If fstat = 0
+      Commit
+      If fstat = 0
+        YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 0)
+        YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Utente" - func YUTILS.STR_IIF(EXIST_USER = 2, "inserito", "aggiornato") - "con successo!" , 1)
+      Else
+        Rollback
+        YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+        YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+      Endif
+    Else
+      Rollback
+      YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+      YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+    Endif
+  Endif
+
+  Raz [F:YAX3MU]
+  YRESPONSE = func YJSONSERIALIZE.GET_JSON(YRESPONSE)
+
+End
+
+#########################################################################################
 Subprog YCHECK_USER(YUSERNAME, YRESPONSE)
 
   Value Char YUSERNAME

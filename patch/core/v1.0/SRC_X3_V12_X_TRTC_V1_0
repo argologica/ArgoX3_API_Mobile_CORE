@@ -2,6 +2,79 @@
 2,"TRT","YAX3MAUTHLIB",""
 #<AdxTL>@(#)0.0.0.0 $Revision$
 #########################################################################################
+Subprog YUPSERT_USR(YUSERNAME, YX3USERNAME, YNOMUSR, YEMAIL, YENAFLG, YHASH, YSALT, YRESPONSE)
+
+  Variable Char YUSERNAME
+  Variable Char YX3USERNAME
+  Variable Char YNOMUSR
+  Variable Char YEMAIL
+  Variable Integer YENAFLG
+  Variable Char YHASH
+  Variable Char YSALT
+
+  Variable Clbfile YRESPONSE
+
+  Local File YAX3MUSER [F:YAX3MU]
+  Local Integer YI
+  Local Char YPASSWORD(50)
+  Local Char YKEYVALUES(250)(2,3)
+  Local Char YCREDENTIALS(250)(2)
+  Local Char PCOD(100)(1), PVAL(100)(1)
+  Local Char YRESPONSE_ARR(250)(func YJSONDESERIALIZE.F_MAXELEMENT(), func YJSONDESERIALIZE.F_DEEPLEVEL() + 1)
+  Local Clbfile YRESPONSE_JSON(1), YBODY(1)
+  Local Integer EXIST_USER : EXIST_USER = 0
+
+  Call OUVRE_TRACE ("YAX3MUSR - Creazione/Aggiornamento Utente ArgoX3 Mobile" - num$(date$)) From LECFIC
+
+  Trbegin [F:YAX3MU]
+  Readlock [F:YAX3MU]YAX3MU0 = YUSERNAME
+  EXIST_USER = func YUTILS.IIF(fstat = 0, 1, 0)
+
+  # Insert record into table
+  [F:YAX3MU]USERNAME     = YUSERNAME
+  [F:YAX3MU]X3USERNAME   = YX3USERNAME
+  [F:YAX3MU]NOMUSR       = YNOMUSR
+  [F:YAX3MU]EMAIL        = YEMAIL
+  [F:YAX3MU]ENAFLG       = YENAFLG # da API
+  [F:YAX3MU]PASSWORDHASH = YHASH
+  [F:YAX3MU]PASSWORDSALT = YSALT
+
+  Local Integer YOPERATION : YOPERATION = 1
+  #non esiste l'utente
+  If EXIST_USER <> 1
+    Write [F:YAX3MU]
+  Else
+    Rewrite [F:YAX3MU]
+  Endif
+
+  If fstat
+    YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+    YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+  Else
+    Gosub GET_WS_CONSTANTS From YUTILS
+    If fstat = 0
+      Commit
+      If fstat = 0
+        YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 0)
+        YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Utente" - func YUTILS.STR_IIF(EXIST_USER = 2, "inserito", "aggiornato") - "con successo!" , 1)
+      Else
+        Rollback
+        YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+        YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+      Endif
+    Else
+      Rollback
+      YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+      YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+    Endif
+  Endif
+
+  Raz [F:YAX3MU]
+  YRESPONSE = func YJSONSERIALIZE.GET_JSON(YRESPONSE)
+
+End
+
+#########################################################################################
 Subprog YCHECK_USER(YUSERNAME, YRESPONSE)
 
   Value Char YUSERNAME
@@ -389,6 +462,468 @@ Subprog YWRITE(YMESSAGE)
 End
 **********
 7,"TRT","YAX3MLOG",""
+2,"TRT","YAX3MPROTOCOLLIB",""
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#https://chatgpt.com/c/67e137e9-07ac-8008-b604-b698d353c0ea
+Subprog YPROTOCOL(FUNCTION, YRESPONSE)
+  Value Char FUNCTION
+  Variable Clbfile YRESPONSE
+
+  Local File YVPROTOCOL [F:YVPR]
+  Local Char YCRITERE(250)
+
+  # campi top-level result
+  #Local Clbfile YFUNCTION_FIELDS(1)(6)   # activityCode,code,description,objectAccess,action,window
+
+  # campi action
+  Local Clbfile YACTION_FIELDS(1)(13)  # activityCode,code,stdTrt,speTrt,subProg,nextAction,consultationCode,mainWindow,initialInsertion,windowCriteria,programPerAction,preAfterAction
+
+  # campi window
+  Local Clbfile YWINDOW_FIELDS(1)(0..)   # activityCode,code,description,type,typeWindow,headScreen,active,screens,buttons
+
+  # array screens
+  Local Clbfile YSCREENS(1)(rowcount([F:YVPR]))
+  Local Clbfile YSCREEN(1)(11)    # activityCode,code,number,description,position,speTrt,spvTrt,stdTrt
+
+  # array refTables (max 5)
+  Local Char REFNAMES(12)(5)
+  Local Clbfile YREF_TABLES(1)(0..)
+
+  # array blocks (max 15)
+  Local Char YBLOCK_FIELDS(250)(5)     # blockNumber,blockTitle,blockType,blockTypeValue,blockParamField,blockVisible
+  Local Clbfile YBLOCKS(1)(15)
+
+  #window number, title and description
+  Local Char YSE_FIELDS(250)(3)        # ogni riga ha 3 colonne: nome, descrizione, numero
+  Local Char YSE_ITEM(250)              # oggetto JSON per ciascun elemento
+  Local Clbfile YSE_ITEMS(1)(15)      # fino a 15 elementi
+  Local Integer SE : SE = 0           # contatore elementi
+
+  Local Integer I, J, B
+
+  Call OUVRE_TRACE("YPROTOCOL") From LECFIC
+
+  # filtro per FUNCTION
+  YCRITERE = "CODINT = '" + FUNCTION + "'"
+  Filter [F:YVPR] Where CODINT = FUNCTION
+&                 Order By Key CLE = CODINT;CODMSK
+
+  For [F:YVPR]CLE(1)
+    # inizio JSON
+    YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+    # Function
+    Append YRESPONSE, func YJSONSERIALIZE.GET_STR("activityCode", [F:YVPR]ACODACT, 0)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_STR("code", [F:YVPR]CODINT, 0)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_STR("description", [F:YVPR]FTEXTE, 0)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_BOOL("objectAccess", [F:YVPR]TYP, 0)
+
+    # Action
+    YACTION_FIELDS(0)  = func YJSONSERIALIZE.GET_STR("activityCode", [F:YVPR]ACODACT, 1)
+    YACTION_FIELDS(1)  = func YJSONSERIALIZE.GET_STR("code", [F:YVPR]ACTION, 1)
+    YACTION_FIELDS(2)  = func YJSONSERIALIZE.GET_STR("stdTrt", [F:YVPR]CODTRT, 1)
+    YACTION_FIELDS(3)  = func YJSONSERIALIZE.GET_STR("speTrt", [F:YVPR]SPETRT, 1)
+    YACTION_FIELDS(4)  = func YJSONSERIALIZE.GET_STR("subProg", [F:YVPR]SUBPRG, 1)
+    YACTION_FIELDS(5)  = func YJSONSERIALIZE.GET_STR("nextAction", [F:YVPR]ACTSUI, 1)
+    YACTION_FIELDS(6)  = func YJSONSERIALIZE.GET_STR("consultationCode", [F:YVPR]PARAM1, 1)
+    YACTION_FIELDS(7)  = func YJSONSERIALIZE.GET_STR("mainWindow", [F:YVPR]PARAM2, 1)
+    YACTION_FIELDS(8)  = func YJSONSERIALIZE.GET_STR("initialInsertion", num$([F:YVPR]PARAM3), 1)
+    YACTION_FIELDS(9)  = func YJSONSERIALIZE.GET_STR("windowCriteria", [F:YVPR]PARAM4, 1)
+    YACTION_FIELDS(10) = func YJSONSERIALIZE.GET_STR("programPerAction", [F:YVPR]PARAM5, 1)
+    YACTION_FIELDS(11) = func YJSONSERIALIZE.GET_STR("preAfterAction", num$([F:YVPR]PARAM6), 1)
+
+    Local Shortint WINDOWFIELDS_INDEX : WINDOWFIELDS_INDEX = 0
+    # Window
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX) = func YJSONSERIALIZE.GET_STR("activityCode", [F:YVPR]WCODACT, 1)
+    WINDOWFIELDS_INDEX+=1
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX) = func YJSONSERIALIZE.GET_STR("code", [F:YVPR]WIN, 1)
+    WINDOWFIELDS_INDEX+=1
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX) = func YJSONSERIALIZE.GET_STR("description", [F:YVPR]WTEXTE, 1)
+    WINDOWFIELDS_INDEX+=1
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX) = func YJSONSERIALIZE.GET_STR("type", num$([F:YVPR]TYP), 1)
+    WINDOWFIELDS_INDEX+=1
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX) = func YJSONSERIALIZE.GET_STR("typeWindow", num$([F:YVPR]WINTYP), 1)
+    WINDOWFIELDS_INDEX+=1
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX) = func YJSONSERIALIZE.GET_STR("headScreen", [F:YVPR]MSKENT, 1)
+    WINDOWFIELDS_INDEX+=1
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX) = func YJSONSERIALIZE.GET_BOOL("active", func YUTILS.IIF([F:YVPR]ENAFLG = 2, 1, 0) , 1)
+
+    # Screens array
+    J = 0
+    For [F:YVPR]CLE(2)
+      # screen
+      YSCREEN(0)= func YJSONSERIALIZE.GET_STR("activityCode", [F:YVPR]SCODACT, 1)
+      YSCREEN(1)= func YJSONSERIALIZE.GET_STR("code", [F:YVPR]CODMSK, 1)
+      YSCREEN(2)= func YJSONSERIALIZE.GET_INT("number", [F:YVPR]ROWMSK(J), 1)
+      YSCREEN(3)= func YJSONSERIALIZE.GET_STR("description", [F:YVPR]STTEXTE, 1)
+      YSCREEN(4)= func YJSONSERIALIZE.GET_DECIMAL("position", [F:YVPR]POSBLOC, 1)
+      YSCREEN(5)= func YJSONSERIALIZE.GET_STR("speTrt", [F:YVPR]TRTSPE, 1)
+      YSCREEN(6)= func YJSONSERIALIZE.GET_STR("spvTrt", [F:YVPR]TRTSPV, 1)
+      YSCREEN(7)= func YJSONSERIALIZE.GET_STR("stdTrt", [F:YVPR]TRTSTD, 1)
+
+      YREF_TABLES(J)= func YJSONSERIALIZE.GET_STRLST("refTables", [F:YVPR]FICREF, 1)
+      Append YSCREEN(8), YREF_TABLES(J)
+
+      # blocks
+      B = 0
+      For I = 0 To 14
+        If [F:YVPR]RANG(I) > 0
+          #DIVIDO PER 5, PERCHè IN DOT NET LA FUNZIONE SORTSCREENS FA UN COMPARE CON IL NUMERO DI BLOCCO DEL CAMPO CHE PARTE DA 1 E NON E' IN M ULTIPLI DI 5
+          YBLOCK_FIELDS(0)= func YJSONSERIALIZE.GET_INT("blockNumber", [F:YVPR]RANG(I) / 5, 1)
+          YBLOCK_FIELDS(1)= func YJSONSERIALIZE.GET_STR("blockTitle", [F:YVPR]SBTEXTE(I), 1)
+          YBLOCK_FIELDS(2)= func YJSONSERIALIZE.GET_INT("blockType", [F:YVPR]TYPBLOC(I), 1)
+          YBLOCK_FIELDS(3)= func YJSONSERIALIZE.GET_STR("blockParamField", [F:YVPR]BASPAG(I), 1)
+          YBLOCK_FIELDS(4)= func YJSONSERIALIZE.GET_INT("blockVisible", [F:YVPR]YVISBLOC(I), 1)
+          YBLOCKS(B)= func YJSONSERIALIZE.GET_CLBOBJ_FROM_STRARRAY(AVOID.ACHAR, YBLOCK_FIELDS, 1, 1)
+          B += 1
+        Endif
+      Next
+      Append YSCREEN(9), func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("blocks", YBLOCKS, 1)
+      Append YSCREEN(10), func YJSONSERIALIZE.GET_EMPTYARRAY("fields", 0)
+      # oggetto screen
+      YSCREENS(J)= func YJSONSERIALIZE.GET_CLBOBJ(AVOID.ACHAR, YSCREEN, 1, 1)
+      J += 1
+    Next
+
+    WINDOWFIELDS_INDEX+=1
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX)= func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("screens", YSCREENS, 1)
+#    WINDOWFIELDS_INDEX+=1
+#    YWINDOW_FIELDS(WINDOWFIELDS_INDEX)= func YJSONSERIALIZE.GET_EMPTYARRAY("buttons", 0)
+    YACTION_FIELDS(12) = func YJSONSERIALIZE.GET_CLBOBJ("window", YWINDOW_FIELDS, 0, 1)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_CLBOBJ("action", YACTION_FIELDS, 0, 1)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+  Next
+#Call YPRINT_CLB(YRESPONSE, "YRESPONSE", "json") From YUTILS
+End
+
+#######################################################################################################
+
+Subprog YWINBTS(WINCODE, YRESPONSE)
+  Value Char WINCODE
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("YWINBTS") From LECFIC
+
+  Local File YVWINBTN [F:YVWB]
+
+  Local Char YPARAM_FIELDS(250)(4)
+  Local Clbfile YACTION_FIELDS(1)(12), YBUTTON_FIELDS(1)(6)
+
+  Local Clbfile YACTION(1), YPARAM(1), YBUTTON(2)
+
+  Local Integer I, J, COUNT_BUTTONS : I = 0 : J = 0 : BUTTON_COUNT = 0
+
+  Columns [F:YVWB] (CODACT, ACTION, CODTRT, SPETRT, SUBPRG, ACTSUI, PARAM1, PARAM2, PARAM3, PARAM4,
+&                   CODPAR, VALPAR, TYPPAR, YSENDAX3M, CODACTBOUT, NUM, CODBOUT, TYPBOUT, TEXTE)
+
+  Filter [F:YVWB] Where WIN = WINCODE
+&                 Order By Key CLE=CODBOUT;CODPAR
+
+  Local Clbfile YPARAMETERS(1)(0..), YBUTTONS(1)(0..)
+
+  If !fstat
+    YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+
+    For [F:YVWB]CLE(1)
+      YACTION_FIELDS(0) = func YJSONSERIALIZE.GET_STR("activityCode", [F:YVWB]CODACT, 1)
+      YACTION_FIELDS(1) = func YJSONSERIALIZE.GET_STR("code", [F:YVWB]ACTION, 1)
+      YACTION_FIELDS(2) = func YJSONSERIALIZE.GET_INT("number", [F:YVWB]NUM, 1)
+      YACTION_FIELDS(3) = func YJSONSERIALIZE.GET_STR("stdTrt", [F:YVWB]CODTRT, 1)
+      YACTION_FIELDS(4) = func YJSONSERIALIZE.GET_STR("speTrt", [F:YVWB]SPETRT, 1)
+      YACTION_FIELDS(5) = func YJSONSERIALIZE.GET_STR("subProg", [F:YVWB]SUBPRG, 1)
+      YACTION_FIELDS(6) = func YJSONSERIALIZE.GET_STR("nextAction", [F:YVWB]ACTSUI, 1)
+      YACTION_FIELDS(7) = func YJSONSERIALIZE.GET_STR("consultationCode", [F:YVWB]PARAM1, 1)
+      YACTION_FIELDS(8) = func YJSONSERIALIZE.GET_STR("mainWindow", [F:YVWB]PARAM2, 1)
+      YACTION_FIELDS(9) = func YJSONSERIALIZE.GET_STR("initialInsertion", num$([F:YVWB]PARAM3), 1)
+      YACTION_FIELDS(10) = func YJSONSERIALIZE.GET_STR("windowCriteria", [F:YVWB]PARAM4, 1)
+
+      For [F:YVWB]CLE(2)
+        YPARAM_FIELDS(0) = func YJSONSERIALIZE.GET_STR("parameterCode", [F:YVWB]CODPAR, 1)
+        YPARAM_FIELDS(1) = func YJSONSERIALIZE.GET_STR("parameterValue", [F:YVWB]VALPAR, 1)
+        YPARAM_FIELDS(2) = func YJSONSERIALIZE.GET_INT("parameterType", [F:YVWB]TYPPAR, 1)
+        YPARAM_FIELDS(3) = func YJSONSERIALIZE.GET_INT("sendAX3M", [F:YVWB]YSENDAX3M, 1)
+
+        YPARAM = func YJSONSERIALIZE.GET_CLBOBJ_FROM_STRARRAY(AVOID.ACHAR, YPARAM_FIELDS, 1, 1)
+        YPARAMETERS(J) = YPARAM
+        J += 1
+      Next
+      J = 0
+
+      YACTION_FIELDS(11) = func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("parameters", YPARAMETERS, 1)
+
+      YACTION = func YJSONSERIALIZE.GET_CLBOBJ("action", YACTION_FIELDS, 0, 1)
+
+      YBUTTON_FIELDS(0) = func YJSONSERIALIZE.GET_STR("activityCode", [F:YVWB]CODACTBOUT, 1)
+      YBUTTON_FIELDS(1) = func YJSONSERIALIZE.GET_STR("number", num$([F:YVWB]NUM), 1)
+      YBUTTON_FIELDS(2) = func YJSONSERIALIZE.GET_STR("code", [F:YVWB]CODBOUT, 1)
+      YBUTTON_FIELDS(3) = func YJSONSERIALIZE.GET_STR("type", num$([F:YVWB]TYPBOUT), 1)
+      YBUTTON_FIELDS(4) = func YJSONSERIALIZE.GET_STR("description", [F:YVWB]TEXTE, 1)
+      YBUTTON_FIELDS(5) = YACTION
+
+      YBUTTON = func YJSONSERIALIZE.GET_CLBOBJ(AVOID.ACHAR, YBUTTON_FIELDS, 1, 1)
+      YBUTTONS(I) = YBUTTON
+
+      Raz YACTION, YBUTTON, YPARAMETERS
+      I += 1
+
+    Next
+
+    YRESPONSE += func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("buttons", YBUTTONS, 1)
+    YRESPONSE += func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+  Endif
+
+#Call YPRINT_CLB(YRESPONSE, "YRESPONSE", "json") From YUTILS
+End
+
+##########################################################################################
+Subprog YSCRFLD(SCREENCODE, YRESPONSE)
+  Variable Char SCREENCODE
+  Variable Clbfile YRESPONSE
+
+  Local Char YCRITERE(250)
+
+  Call OUVRE_TRACE("YSCRFLD") From LECFIC
+
+  Local File YVSCRFLD [F:YVSF]
+  Local File APLSTD [F:YAST]
+
+  Local Integer I, J, K, L
+  Local Char YLOCALMENU_ITEM(250), YLOCALMENU_FIELDS(250)(3), YPARAM_FIELDS(250)(4)
+  Local Clbfile YTYPE_ITEM(1)(0..5), YFIELD_ITEM(1), YACTION_ITEMS(1)(6),
+&               YPARAMETERS(1)(0..), YACTION(1)(0..), YFIELDS_DATA(1)(0..)
+
+  YCRITERE = "CODMSK='" + SCREENCODE  + "'"
+
+  Columns [F:YVSF] (CODACT, CODZON, CODTYP, YTEXTE, TYPTYP, TYPDES, LNGTYP, NOLIB, TEXTE, DIME, LONG, LIEN, NUMBLOC, NOZONE, VALDEF, OPTFOR,
+&                   OBLIG, BREAKAFTER, TYPGRAPH, SAIAFF, YSCANMODE, ACTION, LANNUM, CODTRT, SPETRT, SUBPRG, CODPAR, VALPAR, TYPPAR, YSENDAX3M)
+  Filter [F:YVSF] Where evalue(YCRITERE)
+&                 Order By Key CLE=CODZON;ACTION;NOPAR
+
+  If !fstat
+    Local Clbfile YFIELDS(1)(0..)
+    Local Char YLOCALMENUS(250)(0..)
+
+    YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+    I = 0
+
+    For [F:YVSF]CLE(1)
+      YFIELDS_DATA(0) = func YJSONSERIALIZE.GET_STR("activityCode", [F:YVSF]CODACT, 1)
+      YFIELDS_DATA(1) = func YJSONSERIALIZE.GET_STR("code", [F:YVSF]CODZON, 1)
+
+      #Gestione tipo dato come oggetto
+      YTYPE_ITEM(0) = func YJSONSERIALIZE.GET_STR("value", [F:YVSF]CODTYP, 1)
+      YTYPE_ITEM(1) = func YJSONSERIALIZE.GET_STR("description", [F:YVSF]YTEXTE, 1)
+      YTYPE_ITEM(2) = func YJSONSERIALIZE.GET_INT("typeValue", [F:YVSF]TYPTYP, 1)
+      YTYPE_ITEM(3) = func YJSONSERIALIZE.GET_STR("typeDescription", [F:YVSF]TYPDES, 1)
+      YTYPE_ITEM(4) = func YJSONSERIALIZE.GET_INT("length", [F:YVSF]LNGTYP, 1)
+
+      If [F:YVSF]NOLIB > 0
+        Columns [F:YAST] (LANCHP, LANNUM, LANMES)
+        Filter [F:YAST] Where LANCHP = [F:YVSF]NOLIB & LANNUM > 0 & LAN = GLANGUE
+        J = 0
+        For [F:YAST]
+          YLOCALMENU_FIELDS(0) = func YJSONSERIALIZE.GET_INT("chapter", [F:YAST]LANCHP, 1)
+          YLOCALMENU_FIELDS(1) = func YJSONSERIALIZE.GET_INT("number_", [F:YAST]LANNUM, 1)
+          YLOCALMENU_FIELDS(2) = func YJSONSERIALIZE.GET_STR("message", [F:YAST]LANMES, 1)
+          YLOCALMENU_ITEM = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, YLOCALMENU_FIELDS, 1, 1)
+          YLOCALMENUS(J) = YLOCALMENU_ITEM
+          J += 1
+        Next
+        YTYPE_ITEM(5) = func YJSONSERIALIZE.GET_CLBARRAY_FROM_STRARRAY("localMenu", YLOCALMENUS, 1)
+        Filter [F:YAST]
+      Endif
+
+      YFIELDS_DATA(2) = func YJSONSERIALIZE.GET_CLBOBJ("type", YTYPE_ITEM, 0, 1)
+      YFIELDS_DATA(3) = func YJSONSERIALIZE.GET_STR("description", [F:YVSF]TEXTE, 1)
+      YFIELDS_DATA(4) = func YJSONSERIALIZE.GET_INT("dim", [F:YVSF]DIME, 1)
+      YFIELDS_DATA(5) = func YJSONSERIALIZE.GET_INT("length", [F:YVSF]LONG, 1)
+      YFIELDS_DATA(6) = func YJSONSERIALIZE.GET_INT("linkedField", [F:YVSF]LIEN, 1)
+      YFIELDS_DATA(7) = func YJSONSERIALIZE.GET_INT("blockNumber", [F:YVSF]NUMBLOC, 1)
+      YFIELDS_DATA(8) = func YJSONSERIALIZE.GET_INT("blockFieldNumber", [F:YVSF]NOZONE, 1)
+      YFIELDS_DATA(9) = func YJSONSERIALIZE.GET_STR("defaultValue", [F:YVSF]VALDEF, 1)
+      YFIELDS_DATA(10) = func YJSONSERIALIZE.GET_STR("formatOptions", [F:YVSF]OPTFOR, 1)
+      YFIELDS_DATA(11) = func YJSONSERIALIZE.GET_BOOL("mandatory", func YUTILS.IIF([F:YVSF]OBLIG = 2, 1, 0) , 1)
+      YFIELDS_DATA(12) = func YJSONSERIALIZE.GET_BOOL("breakAfter", func YUTILS.IIF([F:YVSF]BREAKAFTER = 2, 1, 0) , 1)
+      YFIELDS_DATA(13) = func YJSONSERIALIZE.GET_INT("UIControl", [F:YVSF]TYPGRAPH, 1)
+      YFIELDS_DATA(14) = func YJSONSERIALIZE.GET_INT("entryType", [F:YVSF]SAIAFF, 1)
+      YFIELDS_DATA(15) = func YJSONSERIALIZE.GET_INT("localMenu", [F:YVSF]NOLIB, 1)
+      YFIELDS_DATA(16) = func YJSONSERIALIZE.GET_INT("scanMode", [F:YVSF]YSCANMODE, 1)
+
+      #Action
+      L = 0
+      For [F:YVSF]CLE(2)
+        If vireblc([F:YVSF]ACTION, 2) <> AVOID.ACHAR
+
+          Raz YACTION_ITEMS  # Pulizia dei dati precedenti
+          YACTION_ITEMS(0) = func YJSONSERIALIZE.GET_STR("code", [F:YVSF]ACTION, 1)
+          YACTION_ITEMS(1) = func YJSONSERIALIZE.GET_INT("number", [F:YVSF]LANNUM, 1)
+          YACTION_ITEMS(2) = func YJSONSERIALIZE.GET_STR("stdTrt", [F:YVSF]CODTRT, 1)
+          YACTION_ITEMS(3) = func YJSONSERIALIZE.GET_STR("speTrt", [F:YVSF]SPETRT, 1)
+          YACTION_ITEMS(4) = func YJSONSERIALIZE.GET_STR("subProg", [F:YVSF]SUBPRG, 1)
+
+          Raz YPARAMETERS  # Azzeramento array parametri
+          K = 0
+          For [F:YVSF]CLE(3)
+
+            YPARAM_FIELDS(0) = func YJSONSERIALIZE.GET_STR("parameterCode", [F:YVSF]CODPAR, 1)
+            YPARAM_FIELDS(1) = func YJSONSERIALIZE.GET_STR("parameterValue", [F:YVSF]VALPAR, 1)
+            YPARAM_FIELDS(2) = func YJSONSERIALIZE.GET_INT("parameterType", [F:YVSF]TYPPAR, 1)
+            YPARAM_FIELDS(3) = func YJSONSERIALIZE.GET_INT("sendAX3M", [F:YVSF]YSENDAX3M, 1)
+
+            YPARAMETERS(K) = func YJSONSERIALIZE.GET_CLBOBJ_FROM_STRARRAY(AVOID.ACHAR, YPARAM_FIELDS, 1, 1)
+            K += 1
+          Next
+          YACTION_ITEMS(5) = func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("actionParameters", YPARAMETERS, 1)
+
+          YACTION(L) = func YJSONSERIALIZE.GET_CLBOBJ(AVOID.ACHAR, YACTION_ITEMS, 1, 1)
+          L += 1
+        Endif
+      Next
+
+      YFIELDS_DATA(17) = func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("fieldActions", YACTION, 1)
+
+      #fine action
+      YFIELD_ITEM = func YJSONSERIALIZE.GET_CLBOBJ(AVOID.ACHAR, YFIELDS_DATA, 1, 1)
+      YFIELDS(I) = YFIELD_ITEM
+
+      Raz  YTYPE_ITEM, YFIELDS_DATA, YACTION
+      I += 1
+    Next
+
+    YRESPONSE += func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("fields", YFIELDS, 1)
+    YRESPONSE += func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+  Endif
+
+Call YPRINT_CLB(YRESPONSE, "YRESPONSE", "json") From YUTILS
+End
+
+#######################################################################################################
+
+Subprog YACTFLDPAR(SCREENCODE, FIELDCODE, YRESPONSE)
+  Value Char SCREENCODE
+  Value Char FIELDCODE
+  Variable Clbfile YRESPONSE
+
+  Local File YVFLDACTPAR [F:YVFAP]
+
+  Local Char YCRITERE(250), YPARAM_FIELDS(250)(4)
+  Local Clbfile YACTION_ITEMS(1)(6), YPARAM(1)
+  Local Integer I, J : I = 0 : J = 0
+
+  Call OUVRE_TRACE("YACTFLDPAR") From LECFIC
+
+  YCRITERE -= "CODAFF = '" + SCREENCODE + "' &" - "CODZON = '" + FIELDCODE + "'"
+
+  Columns [F:YVFAP] (ACTION, LANNUM, CODTRT, SPETRT, SUBPRG, CODPAR, VALPAR, TYPPAR, YSENDAX3M)
+  Filter [F:YVFAP] Where evalue(YCRITERE)
+&                  Order By Key CLE = ACTION;NOPAR
+
+  If !fstat
+    Local Clbfile YPARAMETERS(1)(rowcount([F:YVFAP]))  # Array per i parametri
+    Local Clbfile YACTION(1)(rowcount([F:YVFAP]))  # Array per le azioni
+
+    YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+    YRESPONSE += func YJSONSERIALIZE.GET_OPENSQUAREBRACKET_KEY("actions")  # Inizio array actions
+
+    For [F:YVFAP]CLE(1)
+      Raz YACTION_ITEMS  # Pulizia dei dati precedenti
+
+      YACTION_ITEMS(0) = func YJSONSERIALIZE.GET_STR("code", [F:YVFAP]ACTION, 1)
+      YACTION_ITEMS(1) = func YJSONSERIALIZE.GET_INT("number", [F:YVFAP]LANNUM, 1)
+      YACTION_ITEMS(2) = func YJSONSERIALIZE.GET_STR("stdTrt", [F:YVFAP]CODTRT, 1)
+      YACTION_ITEMS(3) = func YJSONSERIALIZE.GET_STR("speTrt", [F:YVFAP]SPETRT, 1)
+      YACTION_ITEMS(4) = func YJSONSERIALIZE.GET_STR("subProg", [F:YVFAP]SUBPRG, 1)
+
+      Raz YPARAMETERS  # Azzeramento array parametri
+      I = 0
+
+      For [F:YVFAP]CLE(2)
+        YPARAM_FIELDS(0) = func YJSONSERIALIZE.GET_STR("parameterCode", [F:YVFAP]CODPAR, 1)
+        YPARAM_FIELDS(1) = func YJSONSERIALIZE.GET_STR("parameterValue", [F:YVFAP]VALPAR, 1)
+        YPARAM_FIELDS(2) = func YJSONSERIALIZE.GET_INT("parameterType", [F:YVFAP]TYPPAR, 1)
+        YPARAM_FIELDS(3) = func YJSONSERIALIZE.GET_INT("sendAX3M", [F:YVFAP]YSENDAX3M, 1)
+
+        YPARAM = func YJSONSERIALIZE.GET_CLBOBJ_FROM_STRARRAY(AVOID.ACHAR, YPARAM_FIELDS, 1, 1)
+        YPARAMETERS(I) = YPARAM
+        I += 1
+      Next
+
+      YACTION_ITEMS(5) = func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("actionParameters", YPARAMETERS, 1)
+
+      YACTION(J) = func YJSONSERIALIZE.GET_CLBOBJ(AVOID.ACHAR, YACTION_ITEMS, 1, 1)
+      J += 1  # Incremento J solo qui
+    Next
+
+    Append YRESPONSE, func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY(AVOID.ACHAR, YACTION, 1)
+
+    YRESPONSE += func YJSONSERIALIZE.GET_CLOSESQUAREBRACKET()  # Fine array actions
+    YRESPONSE += func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()  # Fine JSON
+
+  Endif
+
+End
+
+##########################################################################################
+
+Subprog YSCRFLDTYP(FIELDTYPE, YRESPONSE)
+  Value Char FIELDTYPE
+  Variable Clbfile YRESPONSE
+
+  Local File YVSCRFLDTYP [F:YVSFT]
+
+  Local Char YCRITERE(250)
+  Local Char YLOCALMENU_FIELDS(250)(3)
+  Local Char YLOCALMENU_ITEM(250)
+
+  Local Integer I
+
+  Call OUVRE_TRACE("YSCRFLDTYP") From LECFIC
+
+  YCRITERE = "1=1"
+  If vireblc(FIELDTYPE, 2) <> AVOID.ACHAR
+    YCRITERE -= "& CODTYP = '" + FIELDTYPE + "'"
+  Endif
+
+  Filter [F:YVSFT] Where evalue(YCRITERE)
+&                  Order By Key CLE = CODTYP;NOLIB;LANNUM
+
+  If !fstat
+
+    Local Clbfile YLOCALMENUS(1)(rowcount([F:YVSFT]))
+    YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+
+    For [F:YVSFT]CLE(1)
+
+      YRESPONSE += func YJSONSERIALIZE.GET_STR("value", [F:YVSFT]CODTYP, 0)
+      YRESPONSE += func YJSONSERIALIZE.GET_STR("description", [F:YVSFT]TEXTE, 0)
+      YRESPONSE += func YJSONSERIALIZE.GET_INT("typeValue", [F:YVSFT]TYPTYP, 0)
+      YRESPONSE += func YJSONSERIALIZE.GET_STR("typeDescription", [F:YVSFT]TYPDES, 0)
+      YRESPONSE += func YJSONSERIALIZE.GET_INT("length", [F:YVSFT]LNGTYP, 0)
+
+      I = 0
+      For [F:YVSFT]CLE(3)
+        If [F:YVSFT]NOLIB > 0
+          YLOCALMENU_FIELDS(0) = func YJSONSERIALIZE.GET_INT("chapter", [F:YVSFT]NOLIB, 1)
+          YLOCALMENU_FIELDS(1) = func YJSONSERIALIZE.GET_INT("number_", [F:YVSFT]LANNUM, 1)
+          YLOCALMENU_FIELDS(2) = func YJSONSERIALIZE.GET_STR("message", [F:YVSFT]LANMES, 1)
+
+          YLOCALMENU_ITEM = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, YLOCALMENU_FIELDS, 1, 1)
+          YLOCALMENUS(I) = YLOCALMENU_ITEM
+          I += 1
+        Endif
+      Next
+
+      YRESPONSE += func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("localMenu", YLOCALMENUS, 1)
+
+    Next
+
+    YRESPONSE += func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+  Endif
+
+End
+**********
+7,"TRT","YAX3MPROTOCOLLIB",""
 2,"TRT","YAX3MSEL",""
 #<AdxTL>@(#)0.0.0.0 $Revision$
 ###################################################################################################################################
@@ -761,7 +1296,7 @@ $SET_HEADERVALUES
 
       #Gestione Selezioni/SEL(Consultazioni Mobile) senza Multimedia
       If(HEADER(INDEX_HEADER, 0)<>"actions")
-        VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), evalue(COL(INDEX_HEADER)), 1)
+        VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), num$(evalue(COL(INDEX_HEADER))), 1)
       Else
         #No gestione multimedia
         VALUES(INDEX_VALUES, INDEX_HEADER) =  YMEDIA(INDEX_VALUES)
@@ -1104,7 +1639,7 @@ Subprog YCREATEUPDATE_USER(YUSERDATA, YSUCCESS, YMESSAGE)
   Local Clbfile YRESPONSE_JSON(1), YBODY(1)
   Local Integer EXIST_USER : EXIST_USER = 0
 
-  Call OUVRE_TRACE ("YAX3MUSR - Creazione Utente ArgoX3 Mobile -" - num$(date$)) From LECFIC
+  Call OUVRE_TRACE ("YAX3MUSR - Creazione/Aggiornamento Utente ArgoX3 Mobile -" - num$(date$)) From LECFIC
 
   Trbegin [F:YAX3MU]
   For YI = 0 To func YUTILS.COUNT_MULTI(YUSERDATA) - 1
