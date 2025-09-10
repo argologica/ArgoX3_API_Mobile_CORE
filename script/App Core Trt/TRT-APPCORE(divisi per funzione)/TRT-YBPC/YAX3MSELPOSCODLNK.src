@@ -1,0 +1,137 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+# Gestione Selezione POSCOD/CTY per Funzione ###################################################################################
+
+#YBPC -POSCOD
+$POSCOD_BPC
+
+  Gosub SET_LINK_YBPC
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_YBPC_FIELDS
+  Endif
+  Gosub SET_CRITERE_YBPC
+  Gosub SET_TITCOL_YBPC
+
+Return
+
+#YBPC -CTY
+$CTY_BPC
+
+  Gosub SET_LINK_YBPC
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_YBPC_FIELDS
+  Endif
+
+  Gosub SET_CRITERE_CTY_YBPC
+  Gosub SET_TITCOL_CTY_YBPC
+Return
+
+#########################################################################################à
+$SET_LINK_YBPC
+
+  Link [YPOS] With [YTCY]TCY0=[F:YPOS]CRY
+&              As [LNK]
+  #Filter [LNK] Where [LNK]POSCTYCOD = "RM"
+  #Where evalue(CRITERE) Order By [LNK]POSCOD
+#Infbox "RWCONT = "+num$(rowcount([LNK]))
+Return
+
+#####################################################################################
+$INIT_CRITERE_YBPC_FIELDS
+
+Return
+
+#######################################################################################
+
+$SET_CRITERE_YBPC
+
+  NUM_COLS = 4
+
+  If IS_MOBILE = 2
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE)
+    #Order By [LNK]POSCOD
+    COUNT_VALUES = rowcount([LNK])
+#Call ECR_TRACE("4-count=" -num$(COUNT_VALUES),0) From GESECRAN
+    FIELDS(0) = "POSCOD" : FIELDS(1) = "POSCTY" : FIELDS(2) = "POSCTYCOD": FIELDS(3) = "CRY"
+    NBCOL = 0
+  Else
+    GSELFAC = 1
+    TIT(0) = "Selezione CAP"
+    ORDRE = "[YPOS]POSCOD"
+    START = "[YPOS]POSCOD"
+    DEFPAG = 1
+    NBCOL = 1
+
+    Local Char CRITERE(250)
+    CRITERE = "[YPOS]CRY = '" + PARAMS(0) + "'"
+  Endif
+
+Return
+
+$SET_CRITERE_CTY_YBPC
+
+  NUM_COLS = 4
+
+  If IS_MOBILE = 2
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE)
+    #Order By [LNK]POSCOD
+    COUNT_VALUES = rowcount([LNK])
+    FIELDS(0) = "POSCTY" : FIELDS(1) = "POSCOD" : FIELDS(2) = "POSCTYCOD": FIELDS(3) = "CRY"
+    NBCOL = 0
+  Else
+    GSELFAC = 1
+    TIT(0) = "Selezione CAP"
+    ORDRE = "[YPOS]POSCTY"
+    START = "[YPOS]POSCTY"
+    DEFPAG = 1
+    NBCOL = 1
+
+    Local Char CRITERE(250)
+    CRITERE = "[YPOS]CRY = '" + PARAMS(0) + "'"
+  Endif
+
+Return
+
+################################################################################à
+
+$SET_TITCOL_YBPC
+
+  Default File [LNK]
+
+  #Imposto Colonne Lookup
+  Call TEXTFIC("POSCOD","POSCOD",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YPOS]POSCOD"
+  NBCOL += 1 : Call TEXTFIC("POSCOD","POSCTY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YPOS]POSCTY"
+  NBCOL += 1 : Call TEXTFIC("POSCOD","POSCTYCOD",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YPOS]POSCTYCOD"
+  NBCOL += 1 : Call TEXTFIC("POSCOD","CRY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YPOS]CRY"
+
+Return
+
+$SET_TITCOL_CTY_YBPC
+
+  Default File [LNK]
+
+  #Imposto Colonne Lookup
+  Call TEXTFIC("POSCOD","POSCTY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YPOS]POSCTY"
+  NBCOL += 1 : Call TEXTFIC("POSCOD","POSCOD",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YPOS]POSCOD"
+  NBCOL += 1 : Call TEXTFIC("POSCOD","POSCTYCOD",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YPOS]POSCTYCOD"
+  NBCOL += 1 : Call TEXTFIC("POSCOD","CRY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YPOS]CRY"
+
+Return

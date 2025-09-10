@@ -1,0 +1,224 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+$LOT_USC
+  #Sub per SEL LOTTO USCITE
+
+  NUM_COLS = 3
+
+  #LINK
+  Link [YSLF] With [YSTL]STL0=[F:YSLF]ITMREF;[F:YSLF]LOT;[F:YSLF]SLO
+&             As [LNK]
+  Columns [LNK] ([F:YSLF]STOFCY,[F:YSLF]ITMREF,[F:YSLF]LOT,[F:YSLF]SLO)
+
+#  Link [YSTO] With
+#  Columns [LNK] ([F:YSLF]STOFCY,[F:YSLF]ITMREF,[F:YSLF]LOT,[F:YSLF]SLO)
+
+  If IS_MOBILE = 2
+
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE) Order By [F:YSLF]ITMREF;[F:YSLF]LOT
+    COUNT_VALUES = rowcount([LNK])
+
+    #sono le chiavi presenti in header e data del json di output
+    FIELDS(0) = "ITMREF" : FIELDS(1) = "LOT" : FIELDS(2) = "SLO"
+    NBCOL = 0
+  Else
+
+    GSELFAC = 1
+    TIT(0) = mess(2,723,1)#"Selezione lotto"
+    ORDRE = "[F:YSLF]ITMREF;[F:YSLF]LOT"
+    START = "[F:YSLF]LOT"
+    DEFPAG = 1
+    NBCOL = 1
+
+    #Critere
+    Local Char CRITERE(250)
+    CRITERE = "[F:YSLF]ITMREF='"+[M:YSMO1]ITMREF(nolign-1)+"'"
+    CRITERE -= "& [F:YSLF]STOFCY='"+[M:YSMO1]FCY+"'"
+    CRITERE -= "& [F:YSLF]LOT <>AVOID.ACHAR"
+    CRITERE -= "& ([F:YSLF]AAACUMQTY <> 0 | [F:YSLF]QQQCUMQTY <> 0 | [F:YSLF]RRRCUMQTY <> 0)"
+  Endif
+
+  Default File [LNK]
+
+  #Imposto Colonne Lookup
+  Call TEXTFIC("STOLOTFCY","ITMREF",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YSLF]ITMREF"
+  NBCOL += 1 : Call TEXTFIC("STOLOTFCY","LOT",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YSLF]LOT"
+  NBCOL+=1 : Call TEXTFIC("STOLOTFCY","SLO",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YSLF]SLO"
+
+Return
+
+################################################################################
+
+$LOT_CSTK
+
+  #Gosub SET_LINK_CSTK
+  Gosub SET_LINK_CSTK1
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_CSTK_FIELDS
+  Endif
+
+  Gosub SET_CRITERE_CSTK
+  Gosub SET_TITCOL_CSTK
+Return
+
+#################################################################################
+#                             LINK
+#################################################################################
+
+#USC
+
+#**
+#* Sub per Link per Lotto, funzione: YCSTK-Cambio Stock
+#*!
+$SET_LINK_CSTK
+
+  Link [YSLF] With [YSTL]STL0=[F:YSLF]ITMREF;[F:YSLF]LOT;[F:YSTO]SLO;[F:YSTO]STOFCY
+&             As [LNK]
+  Columns [LNK] ([F:YSLF]STOFCY,[F:YSLF]ITMREF,[F:YSLF]LOT,[F:YSLF]SLO)
+
+Return
+
+$SET_LINK_CSTK1
+
+#  Link [YSTO] With [YSLF]SLF0~=[F:YSTO]ITMREF;[F:YSTO]LOT;[F:YSLF]SLO
+#&             As [LNK]
+#  Columns [LNK] ([F:YSLF]STOFCY,[F:YSLF]ITMREF,[F:YSLF]LOT,[F:YSLF]SLO)
+
+Return
+
+$SET_LINK_CSTK2
+
+  #Filter [LNK] Where [LNK]STOFCY = FCY  & [LNK]ITMREF = FCY
+
+Return
+
+##################################################################################
+#                           INIT_CRITERE_FIELDS
+##################################################################################
+#YCSTK
+$INIT_CRITERE_CSTK_FIELDS
+Return
+
+##################################################################################
+#                               SET_CRITERE
+##################################################################################
+
+#YCSTK
+$SET_CRITERE_CSTK
+
+  #NUM_COLS = 3
+  NUM_COLS = 2
+  If IS_MOBILE = 2
+
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE) Order By [F:LNK]ITMREF;[F:LNK]LOT
+    COUNT_VALUES = rowcount([LNK])
+
+Call ECR_TRACE("LOT- SET_CRITERE_CSTK :"-num$(COUNT_VALUES),0) From GESECRAN
+
+    #sono le chiavi presenti in header e data del json di output
+    #FIELDS(0) = "ITMREF" : FIELDS(1) = "LOT" : FIELDS(2) = "SLO"
+    #FIELDS(0) = "LOT" : FIELDS(1) = "ITMREF" : FIELDS(2) = "SLO"
+    FIELDS(0) = "LOT" : FIELDS(1) =  "SLO"
+    NBCOL = 0
+  Else
+
+    GSELFAC = 1
+    TIT(0) = mess(2,723,1)#"Selezione lotto"
+    #ORDRE = "[F:YSLF]ITMREF;[F:YSLF]LOT"
+    #START = "[F:YSLF]LOT"
+    START = "[F:LNK]LOT"
+    DEFPAG = 1
+    NBCOL = 1
+
+    #Critere
+    Local Char CRITERE(250)
+#    CRITERE = "[F:YSLF]ITMREF='"+PARAMS(1)+"'"
+#    CRITERE -= "& [F:YSLF]STOFCY='"+PARAMS(0)+"'"
+#    CRITERE -= "& [F:YSLF]LOT <>AVOID.ACHAR"
+#    CRITERE -= "& ([F:YSLF]AAACUMQTY <> 0 | [F:YSLF]QQQCUMQTY <> 0 | [F:YSLF]RRRCUMQTY <> 0)"
+
+    CRITERE = "[F:LNK]ITMREF='"+PARAMS(1)+"'"
+    CRITERE -= "& [F:LNK]STOFCY='"+PARAMS(0)+"'"
+    CRITERE -= "& [F:LNK]LOT <>AVOID.ACHAR"
+    CRITERE -= "& ([F:LNK]QTYSTU - [F:LNK]CUMALLQTY - [F:LNK]CUMWIPQTY >0)"
+
+  Endif
+
+Return
+
+$SET_CRITERE_CSTK2
+
+  #NUM_COLS = 3
+  NUM_COLS = 2
+  If IS_MOBILE = 2
+
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE) Order By [F:YSLF]ITMREF;[F:YSLF]LOT
+    COUNT_VALUES = rowcount([LNK])
+
+Call ECR_TRACE("LOT- SET_CRITERE_CSTK :"-num$(COUNT_VALUES),0) From GESECRAN
+
+    #sono le chiavi presenti in header e data del json di output
+    #FIELDS(0) = "ITMREF" : FIELDS(1) = "LOT" : FIELDS(2) = "SLO"
+    #FIELDS(0) = "LOT" : FIELDS(1) = "ITMREF" : FIELDS(2) = "SLO"
+    FIELDS(0) = "LOT" : FIELDS(1) =  "SLO"
+    NBCOL = 0
+  Else
+
+    GSELFAC = 1
+    TIT(0) = mess(2,723,1)#"Selezione lotto"
+    #ORDRE = "[F:YSLF]ITMREF;[F:YSLF]LOT"
+    START = "[F:YSLF]LOT"
+    DEFPAG = 1
+    NBCOL = 1
+
+    #Critere
+    Local Char CRITERE(250)
+    CRITERE = "[F:YSLF]ITMREF='"+PARAMS(1)+"'"
+    CRITERE -= "& [F:YSLF]STOFCY='"+PARAMS(0)+"'"
+    CRITERE -= "& [F:YSLF]LOT <>AVOID.ACHAR"
+    CRITERE -= "& ([F:YSLF]AAACUMQTY <> 0 | [F:YSLF]QQQCUMQTY <> 0 | [F:YSLF]RRRCUMQTY <> 0)"
+  Endif
+
+Return
+
+
+##################################################################################
+#                               SET_TITCOL
+##################################################################################
+
+#YCSTK
+$SET_TITCOL_CSTK
+
+# NUM_COLS = 3
+  NUM_COLS = 2
+  Default File [LNK]
+
+#  Call TEXTFIC("STOLOTFCY","ITMREF",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL)="[F:YSLF]ITMREF"
+#  NBCOL += 1 :
+
+#  Call TEXTFIC("STOLOTFCY","LOT",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL)="[F:YSLF]LOT"
+#  NBCOL+=1 : Call TEXTFIC("STOLOTFCY","SLO",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL)="[F:YSLF]SLO"
+
+  Call TEXTFIC("STOLOTFCY","LOT",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:LNK]LOT"
+  NBCOL+=1 : Call TEXTFIC("STOLOTFCY","SLO",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:LNK]SLO"
+
+Return

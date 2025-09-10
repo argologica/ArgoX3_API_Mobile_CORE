@@ -10,6 +10,8 @@ $ACTION
 
 Return
 
+##################################################################################
+
 $INIT
 
   Local Char FUNCTION(5) : FUNCTION = "SOH"
@@ -17,11 +19,13 @@ $INIT
 
 Return
 
+##################################################################################
+
 $SEL_TABLE
 
   Gosub INIT
   Local Shortint OPEN : OPEN = 2
-  Gosub HANDLE_FILES From YAX3MWSLIB
+  Gosub HANDLE_FILES From YAX3MSEL
 
   Case COUZON
     When "YSELTSO" : Gosub S_YSELTSO
@@ -29,21 +33,26 @@ $SEL_TABLE
 
 Return
 
+#################################################################################
+
 $S_YSELTSO
 
   Gosub INIT
 
   Local Char PARAMS(250)(1)
+  PARAMS(0) = [M:YSOH1]SOHTYP  #aggiunto!
 
   Local Shortint IS_MOBILE : IS_MOBILE = 1
-  Gosub CONFIG_GRID From YAX3MWSLIB
+  Gosub CONFIG_GRID From YAX3MSEL
 
 Return
+
+###############################################################################
 
 $FIN
 
   Gosub INIT
   Local Shortint OPEN : OPEN = 1
-  Gosub HANDLE_FILES From YAX3MWSLIB
+  Gosub HANDLE_FILES From YAX3MSEL
 
 Return

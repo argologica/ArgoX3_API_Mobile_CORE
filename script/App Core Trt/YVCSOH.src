@@ -1,0 +1,640 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+
+#If GUSER='ADMIN' : Infbox(ACTION) : Endif
+
+  Case ACTION
+    When "OUVRE"         : Gosub OUVRE
+    When "DEBUT"         : Gosub DEBUT
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+
+Return
+
+###########################################################
+
+$OUVRE
+Return
+
+###########################################################
+
+$DEBUT
+  Call OUVRE_TRACE ("YAX3M - YVCSOH - Ricerca ODV (Consultazione classica) - " - num$(date$)) From LECFIC
+  Call ECR_TRACE("# --- Ricerca ODV (Consultazione classica) --- ",0) From GESECRAN
+Return
+
+###########################################################
+
+$FIN
+  Call FERME_TRACE From LECFIC
+Return
+
+#######################################################################################################################
+#**
+#* Inizializzazione - NOTA: Se la finestra è composta da più  maschere, aggiungere YCURRMSK1, YCURRMSKALIAS1,...
+#*!
+
+$INIT_FILE
+
+  Local Char YWINNAME(20): YWINNAME = "YVCSOH"
+  Local Char YCURRMSK(20): YCURRMSK = "YVCSOH"           #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSK1(20): YCURRMSK1 = "<Nome>"
+  Local Char YCURRMSKALIAS(20): YCURRMSKALIAS= "YVCSOH"  #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSKALIAS1(20): YCURRMSKALIAS1 = "<NomeAlias>"
+  Local Char YACTION(20)
+  Local Char YCURRFIELD(20)
+
+Return
+
+########################################################################################################################
+################################################ SUBPROG /FUNPROG ######################################################
+########################################################################################################################
+
+#SOHNUM: C, SELOBJ
+Subprog C_SOHVCSOH(SOHNUM,BPCNAM,EECNUM,FCY,ITMREF,YAX3MRESP,YRESPONSE,YSOHNUM,BPCNUM,YBPCNAM,YEECNUM,YITMREF,ITMDES1,
+&                  QTY,GROPRI,DISCRGVAL1,DISCRGVAL2,NETPRI,YTOTALE)
+
+  Variable Char SOHNUM
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char FCY
+  Variable Char ITMREF
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YSOHNUM()
+  Variable Char BPCNUM()
+  Variable Char YBPCNAM()
+  Variable Char YEECNUM()
+  Variable Char YITMREF()
+  Variable Char ITMDES1()
+  Variable Decimal QTY()
+  Variable Decimal GROPRI()
+  Variable Decimal DISCRGVAL1()
+  Variable Decimal DISCRGVAL2()
+  Variable Decimal NETPRI()
+  Variable Decimal YTOTALE()
+
+  Call OUVRE_TRACE("C_SOHVCSOH") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCSOHVCSOH"
+  YCURRFIELD = "SOHNUM"
+
+  Local File SORDER [F:YSOH]
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  If(vireblc(SOHNUM,2)<> AVOID.ACHAR)
+    Read[F:YSOH]SOH0 = SOHNUM
+    If(fstat)
+      mkstat = 2
+      YMESSAGE = "Attenzione! Nr.Ordine non in anagrafica."
+      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+    Else
+      mkstat = 0
+    Endif
+  Else
+    mkstat = 0
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+###########################################################################################################################################
+#BPCNAM:
+
+###########################################################################################################################################à
+#EECNUM: C, SEL(?)
+
+Subprog C_EECVCSOH(SOHNUM,BPCNAM,EECNUM,FCY,ITMREF,YAX3MRESP,YRESPONSE,YSOHNUM,BPCNUM,YBPCNAM,YEECNUM,YITMREF,ITMDES1,
+&                  QTY,GROPRI,DISCRGVAL1,DISCRGVAL2,NETPRI,YTOTALE)
+
+  Variable Char SOHNUM
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char FCY
+  Variable Char ITMREF
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YSOHNUM()
+  Variable Char BPCNUM()
+  Variable Char YBPCNAM()
+  Variable Char YEECNUM()
+  Variable Char YITMREF()
+  Variable Char ITMDES1()
+  Variable Decimal QTY()
+  Variable Decimal GROPRI()
+  Variable Decimal DISCRGVAL1()
+  Variable Decimal DISCRGVAL2()
+  Variable Decimal NETPRI()
+  Variable Decimal YTOTALE()
+
+  Local File SORDER [F:YSOH]
+
+  Call OUVRE_TRACE("C_EECVCSOH") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCEECVCSOH"
+  YCURRFIELD = "EECNUM"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  If(vireblc(EECNUM,2)<> AVOID.ACHAR)
+
+    Filter [F:YSOH] Where [F:YSOH]BPIEECNUM = EECNUM
+    If(rowcount([F:YSOH])= 0)
+      mkstat = 2
+      YMESSAGE = "Attenzione! P.Iva non in anagrafica"
+      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+    Else
+      mkstat = 0
+    Endif
+
+#    If(func YCHK_EECFMT(EECNUM)>0)
+#      mkstat = 2
+#      YMESSAGE = "Attenzione! Il formato del valore non corrisponde ad una P.IVA."
+#    Else
+#      mkstat = 0
+#    Endif
+  Else
+    mkstat = 0
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+############################################################################################
+#FCY: C, SEL
+
+Subprog C_FCYVCSOH(SOHNUM,BPCNAM,EECNUM,FCY,ITMREF,YAX3MRESP,YRESPONSE,YSOHNUM,BPCNUM,YBPCNAM,YEECNUM,YITMREF,ITMDES1,
+&                  QTY,GROPRI,DISCRGVAL1,DISCRGVAL2,NETPRI,YTOTALE)
+
+  Variable Char SOHNUM
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char FCY
+  Variable Char ITMREF
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YSOHNUM()
+  Variable Char BPCNUM()
+  Variable Char YBPCNAM()
+  Variable Char YEECNUM()
+  Variable Char YITMREF()
+  Variable Char ITMDES1()
+  Variable Decimal QTY()
+  Variable Decimal GROPRI()
+  Variable Decimal DISCRGVAL1()
+  Variable Decimal DISCRGVAL2()
+  Variable Decimal NETPRI()
+  Variable Decimal YTOTALE()
+
+  Local File FACILITY [F:YFCY]
+
+  Call OUVRE_TRACE("C_FCYVCSOH") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCFCYVCSOH"
+  YCURRFIELD = "FCY"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  If(vireblc(FCY,2) <> AVOID.ACHAR)
+    Read [F:YFCY]FCY0 = FCY
+    If fstat
+      mkstat = 2
+      YMESSAGE = "ATTENZIONE! Sito inesistente!"
+      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+    Else
+      mkstat = 0
+      Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,[F:YFCY]FCYNAM,CURRENTROW) From YAX3MUTILS #LABEL: Descr Sito
+    Endif
+  Else
+    mkstat = 0
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+############################################################################################
+
+#ITMREF: C,SEL
+
+Subprog C_ITRVCSOH(SOHNUM,BPCNAM,EECNUM,FCY,ITMREF,YAX3MRESP,YRESPONSE,YSOHNUM,BPCNUM,YBPCNAM,YEECNUM,YITMREF,ITMDES1,
+&                  QTY,GROPRI,DISCRGVAL1,DISCRGVAL2,NETPRI,YTOTALE)
+
+  Variable Char SOHNUM
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char FCY
+  Variable Char ITMREF
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YSOHNUM()
+  Variable Char BPCNUM()
+  Variable Char YBPCNAM()
+  Variable Char YEECNUM()
+  Variable Char YITMREF()
+  Variable Char ITMDES1()
+  Variable Decimal QTY()
+  Variable Decimal GROPRI()
+  Variable Decimal DISCRGVAL1()
+  Variable Decimal DISCRGVAL2()
+  Variable Decimal NETPRI()
+  Variable Decimal YTOTALE()
+
+  Local File FACILITY [F:YFCY]
+  Local File ITMMASTER [F:YITM]
+
+  Call OUVRE_TRACE("C_ITRVCSOH") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCITRVCSOH"
+  YCURRFIELD = "ITMREF"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  If(vireblc(ITMREF,2) <> AVOID.ACHAR)
+    Read [F:YITM]ITM0 = ITMREF
+    If fstat
+      mkstat = 2
+      YMESSAGE = "ATTENZIONE! Articolo inesistente!"
+      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+    Else
+      mkstat = 0
+      Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,[F:YITM]ITMDES1,CURRENTROW) From YAX3MUTILS #LABEL: descr Articolo
+    Endif
+  Else
+    mkstat = 0
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#############################################################################################
+#BOTTONI DI FINESTRA
+#############################################################################################
+
+Subprog YCRC_VCSOH(YLAYOUT,SOHNUM,BPCNAM,EECNUM,FCY,ITMREF,YAX3MRESP,YRESPONSE,YSOHNUM,BPCNUM,YBPCNAM,
+&                  YEECNUM,YITMREF,ITMDES1,QTY,GROPRI,DISCRGVAL1,DISCRGVAL2,NETPRI,YTOTALE)
+
+  Value Integer YLAYOUT
+  Variable Char SOHNUM
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char FCY
+  Variable Char ITMREF
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YSOHNUM()
+  Variable Char BPCNUM()
+  Variable Char YBPCNAM()
+  Variable Char YEECNUM()
+  Variable Char YITMREF()
+  Variable Char ITMDES1()
+  Variable Decimal QTY()
+  Variable Decimal GROPRI()
+  Variable Decimal DISCRGVAL1()
+  Variable Decimal DISCRGVAL2()
+  Variable Decimal NETPRI()
+  Variable Decimal YTOTALE()
+
+  Local Integer K,YI,YIDX,YSUCCESS : YSUCCESS = 0
+  Local Decimal YYTOTALE
+
+  #apertura traccia
+  Call OUVRE_TRACE("YCRC_VCSOH") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCRCVCSOH"
+  YCURRFIELD = ""
+
+  #init: #parametrizzazioni iniziali :
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
+  YFUNC_NAME = "YVCSOH" : YFUNC_TYPE = "CONS": YMSKALIAS = "YVCSOH" : NUM_COLS = 12 #num campi riquadro (per AX3M) (Gestione automatica?)
+
+  #business logic
+  #Tables + Critere + Link[LNK]
+  Gosub OPEN_FILES
+  Gosub SET_CRITERE
+  Gosub SET_LINK
+
+  #Filter LINK + rowcount
+  Filter [LNK] Where evalue(CRITERE) Order By [F:YSOH]SOHNUM
+  COUNT_VALUES = rowcount([LNK])   #n° record trovati ( = N° righe riquadro)
+
+  If(COUNT_VALUES = 0)
+    YSUCCESS = 1
+    mkstat = 2
+  Else
+    YSUCCESS = 0
+
+    For [LNK]
+      YSOHNUM(YI)    = [F:YSOH]SOHNUM
+      BPCNUM(YI)     = [F:YSOH]BPCORD
+      YBPCNAM(YI)    = [F:YSOH]BPCNAM
+      YEECNUM(YI)    = [F:YSOH]BPIEECNUM
+      YITMREF(YI)    = [F:YSOQ]ITMREF
+      ITMDES1(YI)    = [F:YITM]ITMDES1
+      QTY(YI)        = [F:YSOQ]QTY
+      GROPRI(YI)     = [F:YSOP]GROPRI
+      DISCRGVAL1(YI) = [F:YSOP]DISCRGVAL1
+      DISCRGVAL2(YI) = [F:YSOP]DISCRGVAL2
+      NETPRI(YI)     = [F:YSOP]NETPRI
+
+      Call YCALC_NETTOT(QTY(YI), GROPRI(YI), DISCRGVAL1(YI), DISCRGVAL2(YI), NETPRI(YI), YYTOTALE)
+      YTOTALE(YI)    = YYTOTALE
+
+      YIDX = YI
+      Gosub YAFFZO_YVCSOH_RIQ
+      YI+=1
+    Next
+  Endif
+
+  #Popolamento
+  Call YAX3MOB_UPDATE_NBLIG(YCURRMSKALIAS,"NBLIG",COUNT_VALUES) From YAX3MUTILS
+
+  #end
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+###################################################################################################
+
+Subprog YCLRVCSOH(SOHNUM,BPCNAM,EECNUM,FCY,ITMREF,YAX3MRESP,YRESPONSE,YSOHNUM,BPCNUM,YBPCNAM,YEECNUM,YITMREF,ITMDES1,
+&                 QTY,GROPRI,DISCRGVAL1,DISCRGVAL2,NETPRI,YTOTALE)
+
+  Variable Char SOHNUM
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char FCY
+  Variable Char ITMREF
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YSOHNUM()
+  Variable Char BPCNUM()
+  Variable Char YBPCNAM()
+  Variable Char YEECNUM()
+  Variable Char YITMREF()
+  Variable Char ITMDES1()
+  Variable Decimal QTY()
+  Variable Decimal GROPRI()
+  Variable Decimal DISCRGVAL1()
+  Variable Decimal DISCRGVAL2()
+  Variable Decimal NETPRI()
+  Variable Decimal YTOTALE()
+
+
+  Call OUVRE_TRACE("YCLRVCSOH") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCLRVCSOH"
+  YCURRFIELD = ""
+
+  #init
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
+
+  #business logic
+  Local Integer K,YIDX
+  Raz SOHNUM,BPCNAM,EECNUM,FCY,ITMREF
+  Gosub YAFFZO_FILTERS
+
+  #Pulizia labels (CAMPI FILTRO)
+  Call YAX3MOB_RAZLABEL(YFIELDS,"SOHNUM",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_RAZLABEL(YFIELDS,"FCY",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_RAZLABEL(YFIELDS,"ITMREF",CURRENTROW) From YAX3MUTILS
+
+  For K = 0 To func YUTILS.COUNT(YSOHNUM) - 1
+    Raz YSOHNUM(K),BPCNUM(K),YBPCNAM(K),YEECNUM(K),YITMREF(K),
+&       ITMDES1(K),QTY(K),GROPRI(K),DISCRGVAL1(K),DISCRGVAL2(K),NETPRI(K),YTOTALE(K) #dettaglio
+
+    YIDX = K
+    Gosub YAFFZO_YVCSOH_RIQ
+  Next
+
+  #end
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#################################################################################################
+#################################################################################################
+#**
+#* Apertura TABELLE per Link (contestuale alla funzione)
+#*!
+
+$OPEN_FILES
+
+  Local File SORDER [F:YSOH]
+  Local File SORDERP [F:YSOP]
+  Local File SORDERQ [F:YSOQ]
+  Local File ITMMASTER [F:YITM]
+
+Return
+
+#################################################################################################
+#**
+#* LINK per consultazione (contestuale alla funzione)
+#*!
+
+$SET_LINK
+
+    Link [YSOQ] With [YSOH]SOH0~=[YSOQ]SOHNUM,
+&                    [YSOP]SOP0~=[YSOQ]SOHNUM;[YSOQ]SOPLIN;[YSOQ]SOQSEQ,
+&                    [YITM]ITM0~=[YSOQ]ITMREF
+&               As [LNK]
+&               Order By Key KEYSOH = [YSOH]SOHNUM;[YSOQ]SOPLIN
+
+   Columns [LNK] ([F:YSOH]SOHNUM,[F:YSOH]BPCORD,[F:YSOH]BPCNAM,[F:YSOH]BPIEECNUM,[F:YSOQ]ITMREF,[F:YITM]ITMDES1,[F:YSOQ]QTY,
+&                 [F:YSOP]GROPRI,[F:YSOP]DISCRGVAL1,[F:YSOP]DISCRGVAL2,[F:YSOP]NETPRI)
+
+Return
+
+############################################################################################
+#**
+#* CRITERE per consultazione (contestuale alla funzione)
+#*!
+
+$SET_CRITERE
+
+  Local Char YTRIVCOND(10): YTRIVCOND = "1=1"
+  CRITERE(0) = YTRIVCOND                # "1=1"
+  CRITERE(1) = chr$(32)+"&"+YTRIVCOND   #" & 1=1"
+
+  SOHNUM = vireblc(SOHNUM,2)
+  BPCNAM = vireblc(BPCNAM,2)
+  EECNUM = vireblc(EECNUM,2)
+  FCY    = vireblc(FCY,2)
+  ITMREF = vireblc(ITMREF,2)
+
+  If(SOHNUM <> AVOID.ACHAR)
+    CRITERE(0)-="& instr(1, tolower([F:YSOH]SOHNUM), tolower('" + SOHNUM + "'))<>0"
+  Endif
+
+  If(BPCNAM <> AVOID.ACHAR)
+    CRITERE(0)-="& instr(1, tolower([F:YSOH]BPCNAM), tolower('" + BPCNAM + "'))<>0"
+  Endif
+
+  If(EECNUM <> AVOID.ACHAR)
+    CRITERE(0)-="& instr(1, tolower([F:YSOH]BPIEECNUM), tolower('" + EECNUM + "'))<>0"
+  Endif
+
+  If(FCY <> AVOID.ACHAR)
+    CRITERE(0)-="& [F:YSOH]STOFCY = '" + FCY + "'"
+  Endif
+
+  If(ITMREF <> AVOID.ACHAR)
+  #in like:
+    #CRITERE(0)-="& instr(1, tolower([F:YSOQ]ITMREF), tolower('" + ITMREF + "'))<>0"
+    CRITERE(0)-="& [F:YSOQ]ITMREF = '" + ITMREF + "'"
+  Endif
+
+Return
+
+##################################################################################################################
+#                         SOLO AX3M
+##################################################################################################################
+
+$SET_AX3M_TIT_COL
+
+  Call TEXTFIC("SORDER","SOHNUM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOH]SOHNUM"
+  NBCOL += 1 : Call TEXTFIC("SORDER","BPCORD",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOH]BPCNAM"
+  NBCOL += 1 : Call TEXTFIC("SORDER","BPCNAM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOH]BPCNAM"
+  NBCOL += 1 : Call TEXTFIC("SORDER","BPIEECNUM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOH]BPIEECNUM"
+  NBCOL += 1 : Call TEXTFIC("SORDERQ","ITMREF",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOQ]ITMREF"
+  NBCOL += 1 : Call TEXTFIC("ITMMASTER","ITMDES1",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YITM]ITMDES1"
+  NBCOL += 1 : Call TEXTFIC("SORDERQ","QTY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOQ]QTY"
+  NBCOL += 1 : Call TEXTFIC("SORDERP","GROPRI",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOP]GROPRI"
+  NBCOL += 1 : Call TEXTFIC("SORDERP","DISCRGVAL1",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOP]DISCRGVAL1"
+  NBCOL += 1 : Call TEXTFIC("SORDERP","DISCRGVAL2",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOP]DISCRGVAL2"
+  NBCOL += 1 : Call TEXTFIC("SORDERP","NETPRI",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSOP]NETPRI"
+  NBCOL += 1 : TIT(NBCOL) = "Totale"
+  COL(NBCOL) = "num$([F:YSOQ]QTY*([F:YSOP]GROPRI-([F:YSOP]GROPRI*[F:YSOP]DISCRGVAL1)/100-([F:YSOP]GROPRI*[F:YSOP]DISCRGVAL2)/100))"
+
+Return
+
+ #YNETPRI = YGROPRI - (YGROPRI * YDISCOUNT1) / 100 - (YGROPRI * YDISCOUNT2) / 100
+ #YTOTALE = YQTY*YNETPRI
+
+###################################################################################################################
+#**
+#* Setting Array con elenco cod. Campi per la griglia di Selezione [Lato AX3M]
+#*!
+
+$SET_AX3M_FIELDS
+
+  FIELDS(0) = "YSOHNUM" : FIELDS(1) = "BPCNUM" : FIELDS(2) = "YBPCNAM"
+  FIELDS(3) = "YEECNUM" : FIELDS(4) = "YITMREF" : FIELDS(5) = "ITMDES1"
+  FIELDS(6) = "QTY" : FIELDS(7) = "GROPRI" : FIELDS(8) = "DISCRGVAL1"
+  FIELDS(9) = "DISCRGVAL2" : FIELDS(10) = "NETPRI" : FIELDS(11) = "YTOTALE"
+
+Return
+
+####################################################################################################################
+#                                                 UTILITà
+####################################################################################################################
+#controllo formato P.IVA
+
+Funprog YCHK_EECFMT(YEECNUM)
+
+  Value Char YEECNUM
+  Local Integer YSUCCESS,YI,YJ
+  Local Char YNUMS(1)(10)
+
+  If(len(YEECNUM)<2)
+    YSUCCESS = 2
+  Else
+    For YI = 0 To 9
+      YNUMS(YI) = num$(YI)
+    Next
+
+    #CONTROLLO :formato partita IVA
+    If(find(YEECNUM(1),YNUMS)>0 | find(YEECNUM(2),YNUMS)>0)
+      YSUCCESS = 2
+    Endif
+  Endif
+
+End YSUCCESS
+
+######################################################################
+
+Subprog YCALC_NETTOT(YQTY, YGROPRI, YDISCOUNT1, YDISCOUNT2, YNETPRI, YTOTALE)
+
+  Value Decimal YQTY
+  Value Decimal YGROPRI
+  Value Decimal YDISCOUNT1
+  Value Decimal YDISCOUNT2
+  Variable Decimal YNETPRI
+  Variable Decimal YTOTALE
+
+  YNETPRI = YGROPRI - (YGROPRI * YDISCOUNT1) / 100 - (YGROPRI * YDISCOUNT2) / 100
+  YTOTALE = YQTY*YNETPRI
+End
+
+####################################################################################
+#**
+#* Sub per Affzo Campi Filtro(Testata) YVCSOH
+#*!
+
+$YAFFZO_FILTERS
+
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"SOHNUM") From YAX3MUTILS
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"BPCNAM") From YAX3MUTILS
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"EECNUM") From YAX3MUTILS
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"FCY") From YAX3MUTILS
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"ITMREF") From YAX3MUTILS
+Return
+
+###################################################################################
+#**
+#* Sub per Affzo Campi Riquadro YVCSOH
+#*!
+
+$YAFFZO_YVCSOH_RIQ
+
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"YSOHNUM",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"BPCNUM",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"YBPCNAM",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"YEECNUM",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"YITMREF",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"ITMDES1",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"QTY",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"GROPRI",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"DISCRGVAL1",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"DISCRGVAL2",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"NETPRI",YIDX) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"YTOTALE",YIDX) From YAX3MUTILS
+
+Return

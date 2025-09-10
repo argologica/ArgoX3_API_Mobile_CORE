@@ -1,0 +1,537 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#MC  Gestione Entrate Diversi App - REFACTOR
+
+$ACTION
+
+#If GUSER='ADMIN' : Infbox(ACTION) : Endif
+
+  Case ACTION
+    When "OUVRE"         : Gosub OUVRE
+    When "DEBUT"         : Gosub DEBUT
+    When "BOUTON"        : Gosub BOUTON
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+
+Return
+
+###########################################################
+
+$OUVRE
+
+  Local File STOCK [F:YSTO]
+  Local File STOLOC [F:YSTC]
+  Local File ITMMASTER [F:YITM]
+
+Return
+
+###########################################################
+
+$DEBUT
+
+  Call OUVRE_TRACE ("YAPP - Log Gestione Entrate Diverse - " - num$(date$)) From LECFIC
+  Call ECR_TRACE("# -- Gestione Entrate Diverse --- ",0) From GESECRAN
+  Raz [M:YSMR1]
+
+Return
+
+###########################################################
+
+$BOUTON
+  #clob popolato da X3M, contenuto json
+  Local Clbfile YJSONTEXT:[L]YJSONTEXT =""
+  Local Clbfile YRESPONSE
+
+  Case BOUT
+    When "W"
+      ###---------- Creazione Entrata da X3/AX3M: testo csv creato all'interno
+      Call YCREA_ENT(YJSONTEXT,YRESPONSE)
+    When Default
+  Endcase
+
+Return
+
+##########################################################
+
+$FIN
+
+  Call FERME_TRACE From LECFIC
+  #Call LEC_TRACE From LECFIC
+Return
+
+########################################################################################################################
+################################################ SUBPROG /FUNPROG ######################################################
+########################################################################################################################
+
+#=============================================== AZIONI-CAMPO ==========================================================
+#Controllo su SITO(STOFCY) su Anagrafica & non vuoto
+
+Subprog C_STOENT(STOFCY,YRESPONSE)
+
+    Value Char STOFCY
+    Variable Clbfile YRESPONSE
+
+    Local Char YMESSAGE(250):YMESSAGE =AVOID.ACHAR
+    Local Integer YSUCCESS:YSUCCESS=0
+    Local Char YFIELDS(250)(10,8)
+    Local Char YALERT_WS(50)(1..3,1..3)
+    Local Char YHEADER(0)(1,1)
+    Local Char YDATA(0)(1,1)
+    Local File FACILITY [F:YFCY]
+
+    If vireblc(STOFCY, 2) = AVOID.ACHAR
+
+      YSUCCESS = 1
+      YMESSAGE = "ATTENZIONE! Sito obbligatorio!"
+      If ![V]GWEBSERV
+        Call ECR_TRACE(YMESSAGE, 0) From GESECRAN
+        Call ERREURT(YMESSAGE, 2) From GESECRAN
+        mkstat=2
+      Endif
+    Else
+      Columns [F:YFCY](FCY)
+      Read [F:YFCY]FCY0 = STOFCY
+      If (fstat>0)
+          YSUCCESS=1
+          YMESSAGE = "ATTENZIONE! Sito non in anagrafica!"
+
+          If ![V]GWEBSERV
+            mkstat =2
+            Call ECR_TRACE(YMESSAGE,0) From GESECRAN
+            Call ERREURT(YMESSAGE,2) From GESECRAN
+          Endif
+       Endif
+    Endif
+
+    #QUI valorizzo YRESPONSE
+    If(YSUCCESS=0)
+        Call SET_FIELDS(YFIELDS,"STOFCY","Char",STOFCY,"0",YMESSAGE,"1","0","0",0) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"IPTDAT","Date","null","0",AVOID.ACHAR,"0","0","0",1) From YAX3MJSONGEN
+    Else
+        Call SET_FIELDS(YFIELDS,"STOFCY","Char","null","1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"IPTDAT","Date","null","0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+    Endif
+
+    Call SET_FIELDS(YFIELDS,"TRASFAM","Char","null","0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char","null","0",AVOID.ACHAR,"1","0","1",3) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMDES1","Char","null","0",AVOID.ACHAR,"1","0","1",4) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"LOC","Char","null","0",AVOID.ACHAR,"1","0","1",5) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"STA","Char","null","0",AVOID.ACHAR,"1","0","1",6) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"STU","Char","null","0",AVOID.ACHAR,"1","0","1",7) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"LOCTYP","Char","null","0",AVOID.ACHAR,"1","0","1",8) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"QTYSTU","Decimal","null","0",AVOID.ACHAR,"1","0","1",9) From YAX3MJSONGEN
+
+    YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+End
+
+##############################################################################################
+# C-Azione-Campo CONTROLLO campo TRSFAM
+
+Subprog C_FAMENT(TRSFAM,YRESPONSE)
+
+  Value Char TRSFAM
+  Variable Clbfile YRESPONSE
+
+  Local Char YMESSAGE(250):YMESSAGE =AVOID.ACHAR
+  Local Integer YSUCCESS:YSUCCESS=0
+  Local Char YFIELDS(250)(1,8)
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+
+  If vireblc(TRSFAM, 2) = AVOID.ACHAR
+
+      YSUCCESS = 1
+      YMESSAGE = "ATTENZIONE! Cod.Fam.Movimenti obbligatorio!"
+      If ![V]GWEBSERV
+        Call ERREURT(YMESSAGE, 1) From GESECRAN
+        mkstat=2
+      Endif
+  Else
+     #cerco in anagrafica
+  Endif
+
+  #QUI valorizzo YRESPONSE
+  If(YSUCCESS=0)
+  Else
+  Endif
+
+  #YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+
+End
+
+####################################################################################################################
+# AM -- Controllo su Cod Articolo(ITMREF) su Anagrafica & non vuoto E valorizzazione LOC
+
+Subprog AM_ITRENT(STOFCY,ITMREF,YRESPONSE)
+
+    Value Char ITMREF
+    Value Char STOFCY
+    Variable Clbfile YRESPONSE
+
+    Local Char YMESSAGE(250):YMESSAGE =AVOID.ACHAR
+    Local Integer YSUCCESS:YSUCCESS=0
+    Local Char YFIELDS(250)(7,8)
+    Local Char YALERT_WS(50)(1..3,1..3)
+    Local Char YHEADER(0)(1,1)
+    Local Char YDATA(0)(1,1)
+    Local Char YLOC(10)
+    Local Char YITMDES1(20)
+    Local File ITMFACILIT [F:YITF]
+    Local File ITMMASTER [F:YITM]
+
+    If vireblc(ITMREF, 2) = AVOID.ACHAR
+
+      YSUCCESS = 1
+      YMESSAGE = "ATTENZIONE! Cod.Articolo obbligatorio!"
+      If ![V]GWEBSERV
+        Call ERREURT(YMESSAGE, 1) From GESECRAN
+        mkstat=2
+      Endif
+    Else
+
+      Columns [F:YITF](ITMREF,DEFLOC)
+      Read [F:YITF]ITF0 = ITMREF;STOFCY
+
+      If(fstat=0)
+          #popolo campo LOC con DEFLOC e Descrizione Articolo
+          YLOC = [F:YITF]DEFLOC
+          If ![V]GWEBSERV
+              YITMDES1 = func AFNC.TEXTRA('ITMMASTER','DES1AXX',[M:YSMR1]ITMREF,'')
+              [M:YSMR1]LOC(nolign-1) = YLOC
+          Endif
+      Else
+          YSUCCESS=1
+          YMESSAGE = "ATTENZIONE! Cod.Articolo non in anagrafica!"
+          If ![V]GWEBSERV
+            mkstat =2
+            Call ERREURT(YMESSAGE,2) From GESECRAN
+          Endif
+      Endif
+    Endif
+
+    #QUI valorizzo YRESPONSE
+    If(YSUCCESS=0)
+        Call SET_FIELDS(YFIELDS,"ITMREF","Char",ITMREF,"0",YMESSAGE,"1","0","0",0) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"ITMDES1","Char",YITMDES1,"0",AVOID.ACHAR,"1","0","0",1) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"LOC","Char",YLOC,"0",AVOID.ACHAR,"0","0","0",2) From YAX3MJSONGEN
+    Else
+        Call SET_FIELDS(YFIELDS,"ITMREF","Char","null","1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"ITMDES1","Char","null","0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"LOC","Char","null","0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+    Endif
+
+    Call SET_FIELDS(YFIELDS,"STA","Char","null","0",AVOID.ACHAR,"1","0","1",3) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"STU","Char","null","0",AVOID.ACHAR,"1","0","1",4) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"LOCTYP","Char","null","0",AVOID.ACHAR,"1","0","1",5) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"QTYSTU","Decimal","null","0",AVOID.ACHAR,"1","0","1",6) From YAX3MJSONGEN
+
+    YRESPONSE = func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+End
+
+################################################################################################################
+
+# C -- Controllo su Ubicazione(LOC) su Anagrafica & non vuoto E valorizzazione campi: STA, STU, LOCTYP
+
+Subprog C_LOC_ENT(STOFCY,ITMREF,LOC,YRESPONSE)
+
+    Value Char LOC
+    Value Char ITMREF
+    Value Char STOFCY
+    Variable Clbfile YRESPONSE
+
+    Local Char YMESSAGE(250):YMESSAGE = AVOID.ACHAR
+    Local Integer YSUCCESS:YSUCCESS=0
+    Local Char YSTA (3)
+    Local Char YSTU (3)
+    Local Char YLOCTYP (5)
+    Local Char YALERT_WS(50)(1..3,1..3)
+    Local Char YFIELDS(250)(5,8)
+    Local Char YHEADER(0)(1,1)
+    Local Char YDATA(0)(1,1)
+
+    Local File ITMFACILIT [F:YITF]
+    Local File STOLOC [F:YSTC]
+    Local File ITMMASTER [F:YITM]
+
+    If vireblc(LOC, 2) = AVOID.ACHAR
+
+        YSUCCESS = 1
+        YMESSAGE = "ATTENZIONE! Ubicazione obbligatoria!"
+        If ![V]GWEBSERV
+          #qui traccia
+          Call ERREURT(YMESSAGE, 1) From GESECRAN
+          mkstat=2
+        Endif
+    Else
+        #loc non vuoto
+        Link [F:YITF] With [F:YITM]ITM0=[F:YITF]ITMREF
+&       As [YLNK]
+        Columns [YLNK] ([F:YITM]STU)
+
+        #sta, stu
+        Filter [YLNK] Where [F:YITF]ITMREF=[L]ITMREF
+        If (rowcount([YLNK])>0)
+           For [YLNK]
+
+               YSTA="A"
+               YSTU=[F:YITM]STU
+
+               If ![V]GWEBSERV
+                  [M:YSMR1]STA(nolign-1) = YSTA
+                  [M:YSMR1]STU(nolign-1) = YSTU
+               Endif
+           Next
+        Endif
+        Filter [YLNK]
+
+        #loctyp
+        Columns [F:YSTC](LOCTYP)
+        Read [F:YSTC]STC0 = [L]STOFCY;[L]LOC
+        If (fstat=0)
+           YLOCTYP= [F:YSTC]LOCTYP
+           If ![V]GWEBSERV
+              [M:YSMR1]LOCTYP(nolign-1) = YLOCTYP
+           Endif
+        Else
+           #qui traccia
+        Endif
+    Endif
+
+    #QUI valorizzo YRESPONSE
+    If(YSUCCESS=0)
+        Call SET_FIELDS(YFIELDS,"LOC","Char",LOC,"0",YMESSAGE,"1","0","0",0) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"STA","Char",YSTA,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"STU","Char",YSTU,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"LOCTYP","Char",YLOCTYP,"0",AVOID.ACHAR,"1","0","1",3) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"QTYSTU","Decimal","null","0",AVOID.ACHAR,"0","0","0",4) From YAX3MJSONGEN
+    Else
+        Call SET_FIELDS(YFIELDS,"LOC","Char","null","1",YMESSAGE,"0","0","1",0) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"STA","Char","null","0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"STU","Char","null","0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"LOCTYP","Char","null","0",AVOID.ACHAR,"1","0","1",3) From YAX3MJSONGEN
+        Call SET_FIELDS(YFIELDS,"QTYSTU","Decimal","null","0",AVOID.ACHAR,"1","0","1",4) From YAX3MJSONGEN
+    Endif
+
+    YRESPONSE = func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+End
+
+##############################################################################################
+# Azione-Campo CONTROLLO campo QTYSTU : Controllo qta inserita QTYSTU NON = 0
+
+Subprog C_QTYSTENT(QTYSTU,YRESPONSE)
+
+  Value Decimal QTYSTU
+  Variable Clbfile YRESPONSE
+
+  Local Char YMESSAGE(250):YMESSAGE =AVOID.ACHAR
+  Local Integer YSUCCESS:YSUCCESS=0
+  Local Char YFIELDS(250)(1,8)
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+
+  If(QTYSTU = 0)
+
+    YSUCCESS=1
+    YMESSAGE = "ATTENZIONE! Quantità inserita nulla!"
+
+    If ![V]GWEBSERV
+      mkstat =2
+      Call ECR_TRACE(YMESSAGE,0) From GESECRAN
+      Call ERREURT(YMESSAGE,2) From GESECRAN
+    Endif
+  Endif
+
+  #QUI valorizzo YRESPONSE
+  If(YSUCCESS=0)
+    Call SET_FIELDS(YFIELDS,"QTYSTU","Decimal",num$(QTYSTU),"0",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+  Else
+    Call SET_FIELDS(YFIELDS,"QTYSTU","Decimal","null","1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+  Endif
+
+  YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+
+End
+
+#============================================ AZIONI-BOTTONE ============================================================
+#**
+#* Azione per Creazione Entrata
+#* @param YJSONTEXT Clob di contenuto json
+#* @param YRESPONSE Clob di Response
+#*!
+
+Subprog YCREA_ENT(YJSONTEXT,YRESPONSE)
+
+  Value Clbfile YJSONTEXT
+  Variable Clbfile YRESPONSE
+
+  Local Char YMESSAGE(250):YMESSAGE=AVOID.ACHAR
+  Local Integer YSUCCESS: YSUCCESS=0
+  Local Char YDETAIL(250)(1..250,1..50)                    #matrice campi-record DETTAGLIO
+  Local Char YHEADER(250)(1..250,2)                        #matrice campi-record HEADER
+  Local Clbfile YCSVTEXT(14)
+  Local Char YIMP_CODE(10):YIMP_CODE="YSMR"                #Codice Modello di Import
+  #N° campi usati nel Modello Import  (in questo caso = 22)
+  Local Integer YIMPFLDNUM: YIMPFLDNUM= func YAX3M_IMP_TEMPLATES_LIB.YIMP_FLD_TEMPLATENUM(YIMP_CODE)
+  Local Char YIMP_TEMPLATE(250)(YIMPFLDNUM,2)              #Array per Template Modello di Import
+
+  #1- Riempio array YHEADER e YDETAIL da X3/X3M
+  Call YFILL_HD(YHEADER,YDETAIL,YJSONTEXT)
+
+  #2- Riempio array TEMPLATE MODELLO IMPORT , array = [Code Campo,info]; info = "sez,da dove prendo valore,tipo di dato"
+  Call YIMP_TEMPLATE_FILL(YIMP_TEMPLATE,YIMP_CODE) From YIMPORT_TEMPLATES_LIB
+
+#If![V]GWEBSERV
+#    Call ECR_TRACE("#Testo Template : " + chr$(10),0) From GESECRAN
+#    Call ECR_TRACE(func YARRAYLIB.Y2DCHAR_ARRAY_TO_STRING(YIMP_TEMPLATE),0) From GESECRAN
+#Endif
+
+  #3- Creazione Testo Csv ENTRATA
+  Call YGET_CSV_FROM_HD(YHEADER, YDETAIL, YIMP_TEMPLATE, YCSVTEXT, YIMP_CODE) From YIMPORT_LIB
+
+  #3.1- Testo csv in Traccia
+  If![V]GWEBSERV
+    Call ECR_TRACE("#Testo Csv : " + chr$(10),0) From GESECRAN
+    Call ECR_TRACE(YCSVTEXT,0) From GESECRAN
+  Endif
+
+  #4- Creazione ENTRATA
+  Call YIMP_ENT(YCSVTEXT,YRESPONSE)
+
+End
+
+############################################################################################################################
+# Chiamata Web Service per IMPORT
+
+Subprog YIMP_ENT(YCSVTEXT,YRESPONSE)
+
+  Value Clbfile YCSVTEXT
+  Variable Clbfile YRESPONSE
+
+  Local Char YMESSAGE(250):YMESSAGE = "Import Corretto"
+  Local Integer YSUCCESS:YSUCCESS =0
+  Local Integer YREQNUM
+  Local Integer YSTATUS
+  Local Char YALERT_WS(150)(1,1)
+  Local Char YFIELDS(0)(1,1)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+  Local Char YALERT_TYPE(50): YALERT_TYPE= AVOID.ACHAR
+
+  If dim(GYVCRENT)<0
+     Global Char GYVCRENT(20)
+  Endif
+
+  If(vireblc(YCSVTEXT,2)= AVOID.ACHAR)
+    YMESSAGE ="Il file CSV di input è vuoto"
+    #qui metto warning?
+    YSUCCESS=1
+  Else
+#TODO qui usa YIMP_CODE al posto "YSMR"
+    Call IMPORT("YSMR","NO","REALTIME",chr$(10),YCSVTEXT,YREQNUM,YSTATUS,YMESSAGE) From AOWSIMPORT
+    YMESSAGE = GYVCRENT
+    YSUCCESS = YSTATUS
+
+    If ![V]GWEBSERV
+      Call ECR_TRACE("# Esecuzione Modello di Import: " + "YSMR" +" # Stato ="+ num$(YSUCCESS) + " #Messaggio = " + YMESSAGE ,0) From GESECRAN
+    Endif
+
+    If(YSTATUS>0)
+      YMESSAGE="Errore in Import"
+    Endif
+  Endif
+
+  #Valorizzo clob YRESPONSE
+  If (YSUCCESS >0)
+     YALERT_TYPE="error"
+  Endif
+
+  YRESPONSE=YMESSAGE
+  YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+  # metto toast se import eseguito correttamente?
+
+  If dim(GYVCRENT)>0
+    If ![V]GWEBSERV
+      Kill GYVCRENT
+    Endif
+  Endif
+
+End
+
+
+#=============================================== Altre Subprogs/Funprogs ===================================================
+#===========================================================================================================================
+#**
+#* Riempimento matrice campi HEADER e DETAIL
+#*
+#* @param YHEADER Matrice per Campi Testata
+#* @param YDETAIL Matrice per Campi Dettaglio
+#* @param YJSONTEXT Clob di contenuto json
+#*!
+
+Subprog  YFILL_HD(YHEADER,YDETAIL,YJSONTEXT)
+
+    Variable Char YHEADER()(,)
+    Variable Char YDETAIL()(,)
+    Variable Clbfile YJSONTEXT
+#& YMODE<>"M"
+
+    If![V]GWEBSERV
+      #da X3:riempio Array per HEADER e DETAIL
+      Call YFILL_HEADER_FROMX3(YHEADER)
+      Call YFILL_DETAIL_FROMX3(YDETAIL)
+    Else
+      #TODO:da X3M: riempio gli Array per HEADER e DETAIL
+      #Call YFILL_HDARR_FROMX3M(YHEADER,YDETAIL, YJSONTEXT)
+    Endif
+
+#Infbox "#H: " + func YARRAYLIB.Y2DCHAR_ARRAY_TO_STRING(YHEADER)
+#Infbox "#D: " + func YARRAYLIB.Y2DCHAR_ARRAY_TO_STRING(YDETAIL)
+End
+
+##########################################################################################################################
+#Riempio Array HEADER da X3
+
+Subprog YFILL_HEADER_FROMX3(YHEADER)
+
+    Variable Char YHEADER()(,)
+
+    YHEADER(0,0)= "STOFCY"
+    YHEADER(1,0)= "IPTDAT"
+    YHEADER(2,0)= "TRSFAM"
+
+    YHEADER(0,1)= [M:YSMR1]STOFCY
+    YHEADER(1,1)= format$("D:YYYYMMDD",[M:YSMR1]IPTDAT)
+    YHEADER(2,1)= [M:YSMR1]TRSFAM
+
+End
+
+############################################################################################################################
+#Riempio Array DETAIL da X3
+
+Subprog YFILL_DETAIL_FROMX3(YDETAIL)
+
+    Variable Char YDETAIL()(,)
+    Local Integer YI
+    Local File ITMMASTER [F:YITM]
+
+    YDETAIL(0,0)= "ITMREF"
+    YDETAIL(1,0)= "ITMDES1"
+    YDETAIL(2,0)= "LOC"
+    YDETAIL(3,0)= "STA"
+    YDETAIL(4,0)= "STU"
+    YDETAIL(5,0)= "LOCTYP"
+    YDETAIL(6,0)= "QTYSTU"
+
+    For YI = 0 To [M:YSMR1]NBLIG-1
+
+      YDETAIL(0,YI+1)= [M:YSMR1]ITMREF(YI)
+      YDETAIL(1,YI+1)= func AFNC.TEXTRA('ITMMASTER','DES1AXX',[M:YSMR1]ITMREF(YI),'')
+      YDETAIL(2,YI+1)= [M:YSMR1]LOC(YI)
+      YDETAIL(3,YI+1)= [M:YSMR1]STA(YI)
+      YDETAIL(4,YI+1)= [M:YSMR1]STU(YI)
+      YDETAIL(5,YI+1)= [M:YSMR1]LOCTYP(YI)
+      YDETAIL(6,YI+1)= num$([M:YSMR1]QTYSTU(YI))
+    Next
+End

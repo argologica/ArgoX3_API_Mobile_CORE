@@ -1,0 +1,58 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+
+  Case ACTION
+
+    When "SEL_TABLE"    : Gosub SEL_TABLE
+    When "FIN"          : Gosub FIN
+    When Default
+  Endcase
+
+Return
+
+###############################################################
+
+$INIT
+
+  Local Char FUNCTION(5) : FUNCTION = "YBPC"
+  Local Char TYPE_FIELD(6) : TYPE_FIELD = "VACBPR"
+
+Return
+
+###############################################################
+
+$SEL_TABLE
+
+  Gosub INIT
+  Local Shortint OPEN : OPEN = 2
+  Gosub HANDLE_FILES From YAX3MSEL
+
+  Case COUZON
+    When "YSELVACBPR" : Gosub S_YSELVACBPR
+  Endcase
+
+Return
+
+################################################################
+
+$S_YSELVACBPR
+
+  Gosub INIT
+
+  Local Char PARAMS(250)(2)
+  PARAMS(0) = "ITA"
+  PARAMS(1) = [M:YBPC]VACBPR
+
+  Local Shortint IS_MOBILE : IS_MOBILE = 1
+  Gosub CONFIG_GRID From YAX3MSEL
+Return
+
+################################################################
+
+$FIN
+
+  Gosub INIT
+  Local Shortint OPEN : OPEN = 1
+  Gosub HANDLE_FILES From YAX3MSEL
+
+Return

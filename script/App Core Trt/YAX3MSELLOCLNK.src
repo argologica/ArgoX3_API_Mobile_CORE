@@ -14,10 +14,11 @@ Return
 
 $LOC_ENT
 
-  Link [YSTC] With [YFCY]FCY0~=[YSTC]STOFCY,
-&                  [YITF]ITF0~=PARAMS(0);[YFCY]FCY
+  Link [YSTC] With [YFCY]FCY0~=[YSTC]STOFCY
 &             As   [LNK]
-  Columns [LNK] ( [F:YITF]STOFCY,[F:YFCY]FCYNAM,[F:YITF]ITMREF,[F:YSTC]LOC,[F:YSTC]OCPCOD,[F:YSTC]LOCTYP,[F:YSTC]LOCCAT,[F:YSTC]LOKSTA )
+
+  #Columns [LNK] ( [F:YITF]STOFCY,[F:YFCY]FCYNAM,[F:YITF]ITMREF,[F:YSTC]LOC,[F:YSTC]OCPCOD,[F:YSTC]LOCTYP,[F:YSTC]LOCCAT,[F:YSTC]LOKSTA )
+  Columns [LNK] ( [F:YFCY]FCY,[F:YFCY]FCYNAM,[F:YSTC]LOC,[F:YSTC]OCPCOD,[F:YSTC]LOCTYP,[F:YSTC]LOCCAT,[F:YSTC]LOKSTA )
 
   If (IS_MOBILE = 1)
     Gosub INIT_CRITERE_ENT_FIELDS
@@ -34,17 +35,32 @@ Return
 
 $LOC_USC
 
-  Link [YSTC] With [YFCY]FCY0~=[YSTC]STOFCY,
-&                  [YITF]ITF0~=PARAMS(0);[YFCY]FCY
+#  Link [YSTC] With [YFCY]FCY0~=[YSTC]STOFCY,
+#&                  [YITF]ITF0~=PARAMS(1);[YFCY]FCY
+#&             As  [LNK]
+
+#  Link [YSTO] With [YFCY]FCY0~=[YSTO]STOFCY,
+#&                  [YITF]ITF0~=PARAMS(1);[YFCY]FCY
+#&             As  [LNK]
+
+  Link [YSTO] With [YFCY]FCY0~=[YSTO]STOFCY
 &             As  [LNK]
-  Columns [LNK] ( [F:YITF]STOFCY,[F:YFCY]FCYNAM,[F:YITF]ITMREF,[F:YSTC]LOC,[F:YSTC]OCPCOD,[F:YSTC]LOCTYP,[F:YSTC]LOCCAT,[F:YSTC]LOKSTA )
+
+  #Columns [LNK] ( [F:YITF]STOFCY,[F:YFCY]FCYNAM,[F:YITF]ITMREF,[F:YSTC]LOC,[F:YSTC]OCPCOD,[F:YSTC]LOCTYP,[F:YSTC]LOCCAT,[F:YSTC]LOKSTA )
+  Columns [LNK] ([F:YFCY]FCY,[F:YFCY]FCYNAM,[F:YSTO]ITMREF,[F:YSTO]LOC)
+
+Call ECR_TRACE("RWCNT_LNK ="-num$(rowcount([LNK])),0) From GESECRAN
 
   If (IS_MOBILE = 1)
     Gosub INIT_CRITERE_USC_FIELDS
   Endif
 
-  Gosub SET_CRITERE_ENT_USC
-  Gosub SET_TITCOL_ENT_USC
+  #Gosub SET_CRITERE_ENT_USC
+  Gosub SET_CRITERE_USC
+
+
+  #Gosub SET_TITCOL_ENT_USC
+  Gosub SET_TITCOL_USC
 
 Return
 
@@ -113,7 +129,7 @@ $SET_TITCOL_ENT_USC
   Default File [LNK]
 
   Call TEXTFIC("FACILITY","FCY",2,TIT(NBCOL)) From OBJDIV
-  COL(NBCOL) = "[F:YITF]STOFCY"
+  COL(NBCOL) = "[F:YFCY]FCY"
   NBCOL += 1 : Call TEXTFIC("FACILITY","FCYNAM",2,TIT(NBCOL)) From OBJDIV
   COL(NBCOL) = "[F:YFCY]FCYNAM"
   NBCOL += 1 : Call TEXTFIC("STOLOC","LOC",2,TIT(NBCOL)) From OBJDIV
@@ -124,6 +140,29 @@ $SET_TITCOL_ENT_USC
   COL(NBCOL) = "func AFNC.TEXTRA('TABLOCTYP','TYPDESAXX',[F:YITF]STOFCY,[F:YSTC]LOCTYP)"
   NBCOL += 1 : Call TEXTFIC("STOLOC","LOCCAT",2,TIT(NBCOL)) From OBJDIV
   COL(NBCOL) = "mess([F:YSTC]LOCCAT,2710,1)"
+
+Return
+
+############################################################################################
+
+$SET_TITCOL_USC
+
+  NUM_COLS = 3
+  Default File [LNK]
+
+  Call TEXTFIC("FACILITY","FCY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YFCY]FCY"
+  NBCOL += 1 : Call TEXTFIC("FACILITY","FCYNAM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YFCY]FCYNAM"
+  NBCOL += 1 : Call TEXTFIC("STOCK","LOC",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]LOC"
+
+#  NBCOL += 1 : Call TEXTFIC("STOLOC","OCPCOD",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "mess([F:YSTC]OCPCOD,757,1)"
+#  NBCOL += 1 : Call TEXTFIC("TABLOCTYP","LOCTYP",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "func AFNC.TEXTRA('TABLOCTYP','TYPDESAXX',[F:YITF]STOFCY,[F:YSTC]LOCTYP)"
+#  NBCOL += 1 : Call TEXTFIC("STOLOC","LOCCAT",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "mess([F:YSTC]LOCCAT,2710,1)"
 
 Return
 
@@ -221,13 +260,52 @@ $SET_CRITERE_ENT_USC
   Else
     GSELFAC = 1
     TIT(0) = "Selezione ubicazione"
-    ORDRE = "[F:YITF]STOFCY;[F:YSTC]LOC"
+    ORDRE = "[F:YFCY]FCY;[F:YSTC]LOC"
     START = "[F:YSTC]LOC"
     DEFPAG = 1
     NBCOL = 1
 
     Local Char CRITERE(250)
-    CRITERE = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YSTC]LOKSTA <> 2"
+    #CRITERE = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YSTC]LOKSTA <> 2"
+    CRITERE = "[F:YFCY]FCY = '" + PARAMS(0)+ "' & [F:YSTC]LOKSTA <> 2"
+
+    #Filtro su campo stesso: LOC = PARAMS(2)
+    If(vireblc(PARAMS(2),2)<> AVOID.ACHAR)
+      CRITERE-= "& instr(1, tolower([F:YSTC]LOC), tolower('" + PARAMS(2) + "'))<>0"
+    Endif
+
+  Endif
+Return
+
+##########################################################################################################
+$SET_CRITERE_USC
+
+  NUM_COLS = 3
+
+  If IS_MOBILE = 2
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE) Order By [F:YFCY]FCY;[F:YSTO]LOC
+    COUNT_VALUES = rowcount([LNK])
+
+    #sono le chiavi presenti in header e data del json di output
+    FIELDS(0) = "FCY" : FIELDS(1) = "FCYNAM" : FIELDS(2) = "LOC"
+    NBCOL = 0
+  Else
+    GSELFAC = 1
+    TIT(0) = "Selezione ubicazione"
+    ORDRE = "[F:YFCY]FCY;[F:YSTO]LOC"
+    START = "[F:YSTO]LOC"
+    DEFPAG = 1
+    NBCOL = 1
+
+    Local Char CRITERE(250)
+    #CRITERE = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YSTC]LOKSTA <> 2"
+    CRITERE = "[F:YFCY]FCY = '" + PARAMS(0)+ "'" #+ "' & [F:YSTO]LOKSTA <> 2"
+
+    #Filtro su campo stesso: LOC = PARAMS(2)
+    If(vireblc(PARAMS(2),2)<> AVOID.ACHAR)
+      CRITERE-= "& instr(1, tolower([F:YSTO]LOC), tolower('" + PARAMS(2) + "'))<>0"
+    Endif
 
   Endif
 Return

@@ -1,0 +1,164 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+################################################################################################
+#                     LIBRERIA  per Funzioni utilizzate in ambito CRM
+################################################################################################
+
+Funprog YREGSTRINGCHECK(YSTRINGTOCHECK)
+
+  Value Char YSTRINGTOCHECK
+
+  # intero usato anche per condizione per ciclo while
+  Local Integer YRES: YRES = 0
+  Local Char YCHARSVIETATI(50): [L]YCHARSVIETATI = "!£$%&/()=?^[]+:;,#@§*\|<>'_°"
+  Local Integer YSTRINGLEN: [L]YSTRINGLEN = len(YCHARSVIETATI)
+  Local Integer YINDEX : YINDEX =1
+  Local Char YSELCHAR(1)
+
+  If(vireblc(YSTRINGTOCHECK,2) <> AVOID.ACHAR)
+    While (YRES=0 & YINDEX <= YSTRINGLEN)
+
+      YSELCHAR = xgetchar(YCHARSVIETATI,YINDEX)
+      If (instr(0,YSTRINGTOCHECK,YSELCHAR) <> 0)
+        YRES=1
+      Endif
+
+      YINDEX +=1
+    Wend
+  Endif
+
+End YRES
+
+################################################################################
+#**
+#* Funzione per controllare se un Numero di Tel è ben formato
+#*
+#* @param YTELSTRINGTOCHECK Alfanumerico associato al N° Telefonico
+#*!
+
+Funprog YREG_TELSTRINGCHECK(YTELSTRINGTOCHECK)
+
+  Value Char YTELSTRINGTOCHECK
+  Local Integer YRES: YRES = 0
+  Local Char YCHARSVIETATI(250): [L]YCHARSVIETATI = "!£$%&/()=?^[]:;,#@§*\|<>'_°abcdefghijklmnopqrstuvwxyz"
+  Local Integer YSTRINGLEN: [L]YSTRINGLEN = len(YCHARSVIETATI)
+  Local Integer YINDEX : YINDEX =1
+  Local Char YSELCHAR(1)
+
+  If(vireblc(YTELSTRINGTOCHECK,2) <> AVOID.ACHAR)
+    While (YRES=0 & YINDEX <= YSTRINGLEN)
+      YSELCHAR = xgetchar(YCHARSVIETATI,YINDEX)
+      YRES = func YUTILS.IIF(instr(0,YTELSTRINGTOCHECK,YSELCHAR) <> 0,1,0)
+      YINDEX +=1
+    Wend
+  Endif
+
+  If(YRES=0)
+    YRES = func YUTILS.IIF(instr(1,YTELSTRINGTOCHECK,"+") <> 0,1,0)
+  Endif
+
+End YRES
+
+############################################################################################
+Funprog YIS_TELVALID(YTEL)
+
+  Value Char YTEL
+  Local Integer YRES: YRES = 0
+
+
+End YRES
+
+############################################################################################
+Funprog YIS_MAILVALID(YMAIL)
+
+  Value Char YMAIL
+  Local Integer YRES: YRES = 0
+
+
+End YRES
+
+############################################################################################
+
+Funprog YIS_WEBVALID(YFWEB)
+
+  Value Char YFWEB
+  Local Integer YRES: YRES = 0
+
+
+End YRES
+
+
+############################################################################################
+#**
+#* Metodo per popolare un array vuoto passato per riferimento con i codici ISO UE
+#*
+#* @param UEISOCODES Array dei codici UE ISO
+#*!
+Subprog YGET_UEISO_CODE(UEISOCODES)
+
+  Variable Char UEISOCODES()()
+
+  UEISOCODES(0)= "AT" : UEISOCODES(1)= "BE" : UEISOCODES(2)= "BG" : UEISOCODES(3)= "CY"
+  UEISOCODES(4)= "CZ" : UEISOCODES(5)= "DE" : UEISOCODES(6)= "DK" : UEISOCODES(7)= "EE"
+  UEISOCODES(8)= "EL" : UEISOCODES(9)= "ES" : UEISOCODES(10)= "FI" : UEISOCODES(11)= "FR"
+  UEISOCODES(12)= "HR" : UEISOCODES(13)= "HU" : UEISOCODES(14)= "IE" : UEISOCODES(15)= "IT"
+  UEISOCODES(16)= "LT" : UEISOCODES(17)= "LU" : UEISOCODES(18)= "LV" : UEISOCODES(19)= "MT"
+  UEISOCODES(20)= "NL" : UEISOCODES(21)= "PL" : UEISOCODES(22)= "PT" : UEISOCODES(23)= "RO"
+  UEISOCODES(24)= "SE" : UEISOCODES(25)= "SI" : UEISOCODES(26)= "SK"
+End
+
+############################################################################################
+#**
+#* Controllo correttezza stringa associata a VAT, se corretta ritorna 0, altrimenti 1
+#*
+#* @param YVATSTRING stringa VAT
+#*!
+Funprog YVALIDA_VAT(YVATSTRING)
+
+  Value Char YVATSTRING
+  Local Integer YRES,YI
+  Local Char UEISOCODES(2)(250)
+  Local Char YSPECIALCHARS(50): YSPECIALCHARS = "!£$%&/()=?^ì[]+*çò@à°#ù§-_.:,;<>\|'"
+
+  If(len(YVATSTRING)<4)
+    YRES = 1
+  Else
+    #controllo primi 2 caratteri: UE ISO CODE
+    #For YI = 0 To func YUTILS.COUN
+    #controllo parte restante
+  Endif
+End YRES
+
+############################################################################################
+#**
+#* Metodo che valida il Codice Cliente (tolti spazi e caratteri speciali)
+#*
+#* @param YBPCNUM Cod.cliente da validare
+#*!
+Funprog YVALIDATEBPC(YBPCNUM)
+
+  Value Char YBPCNUM
+  Local Char YSPECIALCHARS(50): YSPECIALCHARS = "!£$%&/()=?^ì[]+*çò@à°#ù§€-_.:,;<>\|'"
+
+End toupper(vireblc(ctrans(YBPCNUM, YSPECIALCHARS, AVOID.ACHAR), 4))
+
+#############################################################################################
+#**
+#* Metodo che valida il Codice Cliente (tolti spazi e caratteri speciali)
+#*
+#* @param YBPCNUM Cod.cliente da validare
+#*!
+Funprog YVALIDATEVAC(YVACBPR)
+
+  Value Char YVACBPR
+  Local Char YSPECIALCHARS(50): YSPECIALCHARS = "!£$%&/()=?^ì[]+*çò@à°#ù§€-_.:,;<>\|'"
+
+End toupper(vireblc(ctrans(YBPCNUM, YSPECIALCHARS, AVOID.ACHAR), 4))
+
+########################################################################################
+
+Funprog YVALIDATECTY(YCTY)
+
+  Value Char YCTY
+  Local Char YSPECIALCHARS(50): YSPECIALCHARS = "!£$%&/()=?^ì[]+*ç@°#§€-_.:,;<>\|"
+
+End toupper(vireblc(ctrans(YCTY, YSPECIALCHARS, AVOID.ACHAR), 4))

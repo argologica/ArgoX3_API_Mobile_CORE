@@ -1,0 +1,656 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#############################################################################################################################
+#
+#LD - Consultazione ordini di vendita (ArgoX3 Mobile)
+#
+#############################################################################################################################
+
+$ACTION
+
+  Case ACTION
+    When "DEBUT"         : Gosub DEBUT
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+
+Return
+
+
+###########################################################
+
+$DEBUT
+
+  Call OUVRE_TRACE ("YVSOH (ArgoX3 Mobile) - Consultazione ordini di vendita" - num$(date$)) From LECFIC
+  Raz [M:YVSOH]
+  Raz [M:YVSOH2]
+  Affzo [M:YVSOH]
+  Affzo [M:YVSOH2]
+
+Return
+
+##########################################################
+
+$FIN
+
+  Call FERME_TRACE From LECFIC
+
+Return
+
+$INIT_FILE
+
+  Local Char YWINNAME(20) : YWINNAME = "YVSOH"
+  Local Char YCURRMSKNUM(10) : YCURRMSKNUM = func YUTILS.IIF(SCREEN_NUMBER = 1, "YVSOH", "YVSOH" + num$(SCREEN_NUMBER))
+  Local Char YCURRMSK(20) : YCURRMSK =  YCURRMSKNUM
+  Local Char YCURRMSKALIAS(20) : YCURRMSKALIAS = YCURRMSKNUM
+  Local Char YACTION(20)
+  Local Char YCURRFIELD(20)
+
+Return
+
+#####################################################################################################################
+
+Subprog AS_BPCVSOH(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("AS_BPCVSOH") From LECFIC
+
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 1
+  Gosub INIT_FILE
+  YACTION = "YASBPCVSOH"
+  YCURRFIELD = "BPCNAM"
+
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+########################################################################################################################
+
+Subprog AM_BPCVSOH(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("AM_BPCVSOH") From LECFIC
+
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 1
+  Gosub INIT_FILE
+  YACTION = "YAMBPCVSOH"
+  YCURRFIELD = "BPCNAM"
+
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  #Gosub YFILTER_SOH
+  Local File YRICORDSESS [F:YROS]
+  Delete [F:YROS] Where 1=1
+
+  Local Integer YRESULT
+  YRESULT = func YFILTER_ORDERS(ID, BPCNAM, EECNUM, CTY, CRY, WEB, SOHNUM, SOPLIN, ITMREF, ITMDES1, QTY, GROPRI, YNEXTPREV)
+  If YRESULT = 0
+    Gosub YEMPTY_SCREENDATA
+  Elsif YRESULT = 1
+    Gosub YSET_SCREENDATA
+  Endif
+
+  Gosub YFIX_DATA
+  #Call YAX3MOB_FOCUS(YFIELDS,"SOHNUM",0) From YAX3MUTILS
+  #business logic end
+
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+########################################################################################################################
+
+Subprog AM_SOHVSOH(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+
+  Call OUVRE_TRACE("AM_SOHVSOH") From LECFIC
+
+#Infbox num$(ID)-BPCNAM-EECNUM-CTY-CRY-WEB-SOHNUM-ITMREF
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 2
+  Gosub INIT_FILE
+  YACTION = "YAMSOHVSOH"
+  YCURRFIELD = "SOHNUM"
+
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Local File YRICORDSESS [F:YROS]
+  Delete [F:YROS] Where 1=1
+
+  Local Integer YRESULT
+  YRESULT = func YFILTER_ORDERS(ID, BPCNAM, EECNUM, CTY, CRY, WEB, SOHNUM, SOPLIN, ITMREF, ITMDES1, QTY, GROPRI, YNEXTPREV)
+  If YRESULT = 0
+    Gosub YEMPTY_SCREENDATA
+  Elsif YRESULT = 1
+    Gosub YSET_SCREENDATA
+  Endif
+  Gosub YFIX_DATA
+  #Call YAX3MOB_FOCUS(YFIELDS,"SOPLIN",0) From YAX3MUTILS
+  #business logic end
+
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+########################################################################################################################
+
+Subprog AM_EECVSOH(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+
+  Call OUVRE_TRACE("AM_EECVSOH") From LECFIC
+
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 2
+  Gosub INIT_FILE
+  YACTION = "YAMEECVSOH"
+  YCURRFIELD = "EECNUM"
+
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Local File YRICORDSESS [F:YROS]
+  Delete [F:YROS] Where 1=1
+
+  Local Integer YRESULT
+  YRESULT = func YFILTER_ORDERS(ID, BPCNAM, EECNUM, CTY, CRY, WEB, SOHNUM, SOPLIN, ITMREF, ITMDES1, QTY, GROPRI, YNEXTPREV)
+  If YRESULT = 0
+    Gosub YEMPTY_SCREENDATA
+  Elsif YRESULT = 1
+    Gosub YSET_SCREENDATA
+  Endif
+
+  Gosub YFIX_DATA
+  #Call YAX3MOB_FOCUS(YFIELDS,"SOHNUM",0) From YAX3MUTILS #NON FUNZIONA!!
+  #business logic end
+
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+#####################################################################################################################
+
+Subprog AM_NEXTPRE(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("AM_NEXTPREV") From LECFIC
+
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 1
+  Gosub INIT_FILE
+  YACTION = "YAMANEXTPR"
+  YCURRFIELD = "YNEXTPREV"
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic start
+  If YNEXTPREV = 1
+    Gosub YNEXT_SOH
+  Elsif YNEXTPREV = 2
+    Gosub YPREV_SOH
+  Endif
+  #business logic end
+
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#####################################################################################################################
+
+Subprog YPREVVSOH(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("AM_NEXTPREV") From LECFIC
+
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 1
+  Gosub INIT_FILE
+  YACTION = "YPREVVSOH"
+  YCURRFIELD = ""
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILSLDTEST
+
+  #business logic start
+  Gosub YPREV_SOH
+  #business logic end
+
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILSLDTEST
+  Call FERME_TRACE From LECFIC
+End
+
+#####################################################################################################################
+
+Subprog YNEXTVSOH(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("AM_NEXTPREV") From LECFIC
+
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 1
+  Gosub INIT_FILE
+  YACTION = "YNEXTVSOH"
+  YCURRFIELD = ""
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILSLDTEST
+
+  #business logic start
+  Gosub YNEXT_SOH
+  #business logic end
+
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILSLDTEST
+  Call FERME_TRACE From LECFIC
+End
+
+#####################################################################################################################
+
+Subprog YCLEARVSOH(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("YCLEARVSOH") From LECFIC
+
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 1
+  Gosub INIT_FILE
+  YACTION = "YCLEARVSOH"
+  YCURRFIELD = ""
+
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILSLDTEST
+
+  #business logic start
+  Gosub YEMPTY_SCREENDATA
+  Local File YRICORDSESS [F:YROS]
+  Delete [F:YROS] Where 1=1
+
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILSLDTEST
+  Call FERME_TRACE From LECFIC
+
+End
+
+#####################################################################################################################
+
+Subprog YTEMPVSOH(YLAYOUT,ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV,YAX3MRESP,YRESPONSE)
+
+  Value Integer YLAYOUT
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("YTEMPVSOH") From LECFIC
+
+  Local Integer SCREEN_NUMBER : SCREEN_NUMBER = 1
+  Gosub INIT_FILE
+  YACTION = "YTEMPVSOH"
+  YCURRFIELD = ""
+
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILSLDTEST
+
+  #business logic start
+  YOPENFUNCTION(0) = "YSOH" #open
+  YOPENFUNCTION(1) = "Ordine di vendita" - SOHNUM #title
+  YOPENFUNCTION(2) = "OrdineDiVendita" #controller
+  YOPENFUNCTION(3) = "1" #modal navigation
+  #business logic end
+
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILSLDTEST
+  Call FERME_TRACE From LECFIC
+
+End
+
+
+#####################################Funzioni generali################################################################
+
+$YNEXT_SOH
+
+  If !clalev([F:YROS]) : Local File YRICORDSESS   [F:YROS] : Endif
+
+  If vireblc(SOHNUM, 2) <> AVOID.ACHAR
+    Filter [F:YROS] Where ID = ID_VIS + 1
+    Read [F:YROS] First
+    If fstat = 0
+      Gosub YSET_SCREENDATA
+      Gosub YFIX_DATA
+      Filter [F:YROS]
+      Update [F:YROS] Where 1=1 With [F:YROS]ID_VIS = ID_VIS + 1
+    Endif
+  Endif
+
+Return
+
+$YPREV_SOH
+
+  If !clalev([F:YROS]) : Local File YRICORDSESS   [F:YROS] : Endif
+
+  If vireblc(SOHNUM, 2) <> AVOID.ACHAR
+    Filter [F:YROS] Where ID = ID_VIS - 1
+    Read [F:YROS] First
+    If fstat = 0
+      Gosub YSET_SCREENDATA
+      Gosub YFIX_DATA
+      Filter [F:YROS]
+      Update [F:YROS] Where 1=1 With [F:YROS]ID_VIS = ID_VIS - 1
+    Endif
+  Endif
+
+Return
+
+$YEMPTY_SCREENDATA
+
+  BPCNAM = AVOID.ACHAR
+  EECNUM = AVOID.ACHAR
+  CTY = AVOID.ACHAR
+  CRY = AVOID.ACHAR
+  WEB = AVOID.ACHAR
+  SOHNUM = AVOID.ACHAR
+  SOPLIN = 0
+  ITMREF = AVOID.ACHAR
+  ITMDES1 = AVOID.ACHAR
+  QTY = 0
+  GROPRI = 0
+
+Return
+
+$YSET_SCREENDATA
+
+  If !clalev([F:YROS]) : Local File YRICORDSESS [F:YROS] : Endif
+  Read [YROS]YROS0 = func YUTILS.IIF(ID = 0, ID + 1, ID)
+  BPCNAM = [YROS]BPCNAM
+  EECNUM = [YROS]EECNUM
+  CTY = [YROS]CTY
+  CRY = [YROS]CRY
+  WEB = [YROS]WEB(0)
+  SOHNUM = [YROS]SOHNUM
+  SOPLIN = [YROS]SOPLIN
+  ITMREF = [YROS]ITMREF
+  ITMDES1 = [YROS]ITMDES1
+  QTY = [YROS]QTY
+  GROPRI = [YROS]GROPRI
+
+Return
+
+$YFIX_DATA
+
+  If !GWEBSERV
+      #non funziona il passaggio per riferimento degli interi
+    [M:YVSOH2]SOPLIN = func YUTILS.IIF([YROS]SOPLIN > 0, [YROS]SOPLIN, 0)
+    Affzo [M:YVSOH]BPCNAM
+    Affzo [M:YVSOH]EECNUM
+    Affzo [M:YVSOH]CTY
+    Affzo [M:YVSOH]CRY
+    Affzo [M:YVSOH]WEB
+    Affzo [M:YVSOH2]SOHNUM
+    Affzo [M:YVSOH2]SOPLIN
+    Affzo [M:YVSOH2]ITMREF
+    Affzo [M:YVSOH2]ITMDES1
+    Affzo [M:YVSOH2]QTY
+    Affzo [M:YVSOH2]GROPRI
+  Endif
+
+Return
+
+######################################################################################################
+
+Funprog YFILTER_ORDERS(ID,BPCNAM,EECNUM,CTY,CRY,WEB,SOHNUM,SOPLIN,ITMREF,ITMDES1,QTY,GROPRI,YNEXTPREV)
+
+  Value Integer ID
+  Variable Char BPCNAM
+  Variable Char EECNUM
+  Variable Char CTY
+  Variable Char CRY
+  Variable Char WEB
+  Variable Char SOHNUM
+  Value Integer SOPLIN
+  Variable Char ITMREF
+  Variable Char ITMDES1
+  Variable Decimal QTY
+  Variable Decimal GROPRI
+  Value Integer YNEXTPREV
+
+  Local Char YFILTER(250)(2)
+  Local Integer TRANS_OPEN
+
+  Call OUVRE_TRACE("YFILTER_ORDERS") From LECFIC
+
+  If SOPLIN = 0
+    SOPLIN = 1000
+  Endif
+
+  YFILTER = "1=1"
+  If vireblc(SOHNUM, 2) <> AVOID.ACHAR
+    YFILTER(0) -= "& [YSOH]SOHNUM='" + SOHNUM + "'"
+  Endif
+  If vireblc(BPCNAM, 2) <> AVOID.ACHAR
+    YFILTER(0) -= "& instr(1, tolower([YBPC]BPCNAM), tolower('" + BPCNAM + "'))<>0"
+  Endif
+  If vireblc(EECNUM, 2) <> AVOID.ACHAR
+    YFILTER(0) -= "& instr(1, tolower([YBPR]EECNUM), tolower('" + EECNUM + "'))<>0"
+  Endif
+  If vireblc(CTY, 2) <> AVOID.ACHAR
+    YFILTER(1) -= "& instr(1, tolower([YBPA]CTY), tolower('" + CTY + "'))<>0"
+  Endif
+  If vireblc(CRY, 2) <> AVOID.ACHAR
+    YFILTER(1) -= "& instr(1, tolower([YBPA]CRY), tolower('" + CRY + "'))<>0"
+  Endif
+
+  Local File BPCUSTOMER [F:YBPC]
+  Local File BPARTNER   [F:YBPR]
+  Local File BPADDRESS  [F:YBPA]
+  Local File SORDER     [F:YSOH]
+  Local File SORDERP    [F:YSOP]
+  Local File SORDERQ    [F:YSOQ]
+
+  Link  [YSOP] With
+&       [YSOQ]SOQ0 ~= [YSOP]SOHNUM;[YSOP]SOPLIN;[YSOP]SOPSEQ,
+&       [YSOH]SOH0 ~= [YSOQ]SOHNUM,
+&       [YBPC]BPC0 ~= [YSOH]BPCORD,
+&       [YBPR]BPR0 ~= [YBPC]BPCNUM,
+&       [YBPA]BPA0 ~= 1;[YBPR]BPRNUM;[YSOP]BPAADD
+& As    [YLNK]
+& Where evalue(YFILTER)
+
+  Columns [YLNK] ([YBPC]BPCNAM, [YBPR]EECNUM, [YBPA]CTY, [YBPA]CRY, [YBPA]WEB,
+&                 [YSOH]SOHNUM, [YSOP]SOPLIN, [YSOP]ITMREF, [YSOP]ITMDES1, [YSOQ]QTY, [YSOP]GROPRI)
+
+  #Delete [YROS] Where 1=1
+
+#  If adxlog=0
+#    TRANS_OPEN = 0
+#    Trbegin [YROS]
+#  Endif
+  If adxlog = 1
+    Rollback
+  Endif
+
+  Local File YRICORDSESS [F:YROS]
+
+  If rowcount([YLNK]) > 0
+    Trbegin [YROS]
+
+    Local Integer YID : YID = 1
+
+    For [YLNK]
+      [F:YROS]ID = YID
+      Call ECR_TRACE("ID:" - num$([F:YROS]ID), 0) From GESECRAN
+      [F:YROS]ID_VIS = func YUTILS.IIF(ID = 0, ID + 1, ID)
+      Call ECR_TRACE("ID_VIS:" - num$([F:YROS]ID_VIS), 0) From GESECRAN
+      [F:YROS]BPCNAM = [YBPC]BPCNAM
+      Call ECR_TRACE("BPCNAM:" - [F:YROS]BPCNAM, 0) From GESECRAN
+      [F:YROS]EECNUM = [YBPR]EECNUM
+      Call ECR_TRACE("EECNUM:" - [F:YROS]EECNUM, 0) From GESECRAN
+      [F:YROS]CTY = [YBPA]CTY
+      Call ECR_TRACE("CTY:" - [F:YROS]CTY, 0) From GESECRAN
+      [F:YROS]CRY = [YBPA]CRY
+      Call ECR_TRACE("CRY:" - [F:YROS]CRY, 0) From GESECRAN
+      [F:YROS]WEB = [YBPA]WEB(0)
+      Call ECR_TRACE("WEB:" - [F:YROS]WEB(0), 0) From GESECRAN
+      [F:YROS]SOHNUM = [YSOH]SOHNUM
+      Call ECR_TRACE("SOHNUM:" - [F:YROS]SOHNUM, 0) From GESECRAN
+      [F:YROS]SOPLIN = [YSOP]SOPLIN
+      Call ECR_TRACE("SOPLIN:" - num$([F:YROS]SOPLIN), 0) From GESECRAN
+      [F:YROS]ITMREF = [YSOP]ITMREF
+      Call ECR_TRACE("ITMREF:" - [F:YROS]ITMREF, 0) From GESECRAN
+      [F:YROS]ITMDES1 = [YSOP]ITMDES1
+      Call ECR_TRACE("ITMDES1:" - [F:YROS]ITMDES1, 0) From GESECRAN
+      [F:YROS]QTY = [YSOQ]QTY
+      Call ECR_TRACE("QTY:" - num$([F:YROS]QTY), 0) From GESECRAN
+      [F:YROS]GROPRI = [YSOP]GROPRI
+      Call ECR_TRACE("GROPRI:" - num$([F:YROS]GROPRI), 0) From GESECRAN
+      Write  [F:YROS]
+      If !fstat
+        YID = YID + 1
+      Else
+        Rollback
+      Endif
+    Next
+
+    If !fstat #& TRANS_OPEN = 0
+      Commit
+      End 1
+    Else #IF TRANS_OPEN = 0
+      Rollback
+      End 2
+    Endif
+  Else
+    End 0
+  Endif
+
+End -1

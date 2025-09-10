@@ -22,7 +22,7 @@ $TSO_SOH
   If IS_MOBILE = 2
 
     Gosub INIT_GRID
-    Filter [LNK] Order By [F:YTSO]SOHTYP
+    Filter [LNK] Where evalue(CRITERE) Order By [F:YTSO]SOHTYP
     COUNT_VALUES = rowcount([LNK])
 
     #sono le chiavi presenti in header e data del json di output
@@ -38,7 +38,7 @@ $TSO_SOH
   Else
 
     GSELFAC = 1
-    TIT(0) = "Selezione Tipo Ordine"  # TODO: mettere messaggio?
+    TIT(0) = "Selezione Tipo Ordine"
     ORDRE = "[F:YTSO]SOHTYP"
     START = "[F:YTSO]SOHTYP"
     DEFPAG = 1

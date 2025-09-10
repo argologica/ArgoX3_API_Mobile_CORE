@@ -36,6 +36,7 @@ Return
 
 ################################################################
 
+#QUI: valorizzazione multi-campo da SELCUSTOM
 $VERF_TABLE
 
   [M:YSMR1]SERNUM(nolign -1) = [F:YSTO]SERNUM
@@ -49,8 +50,9 @@ $S_YSELITM
 
   Gosub INIT
 
-  Local Char PARAMS(250)(1)
+  Local Char PARAMS(250)(2)
   PARAMS(0) = [M:YSMR1]FCY
+  PARAMS(1) = [M:YSMR1]ITMREF(nolign -1)  #aggiunto!!
 
   Local Shortint IS_MOBILE : IS_MOBILE = 1
   Gosub CONFIG_GRID From YAX3MSEL

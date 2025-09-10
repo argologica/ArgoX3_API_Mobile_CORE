@@ -1,0 +1,77 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+# Gestione Selezione BPAADD per Funzione ###################################################################################
+
+#YBPC
+$ACC_BPC
+
+  Gosub SET_LINK_YBPC
+
+#Infbox "3 - RWCCNT = "- num$(rowcount([LNK]))
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_YBPC_FIELDS
+  Endif
+
+  Gosub SET_CRITERE_YBPC
+  Gosub SET_TITCOL_YBPC
+Return
+
+#########################################################################################à
+$SET_LINK_YBPC
+
+Return
+
+#####################################################################################
+$INIT_CRITERE_YBPC_FIELDS
+
+Return
+
+#######################################################################################
+
+$SET_CRITERE_YBPC
+
+  NUM_COLS = 2
+
+  If IS_MOBILE = 2
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE)
+    COUNT_VALUES = rowcount([LNK])
+    FIELDS(0) = "ACCCOD" : FIELDS(1) = "DES"
+    NBCOL = 0
+  Else
+    GSELFAC = 1
+    TIT(0) = "Selezione Cod.Contabile"
+    ORDRE = "[F:LNK]ACCCOD"
+    START = "[F:LNK]ACCCOD"
+    DEFPAG = 1
+    NBCOL = 1
+
+    Local Char CRITERE(250)
+    CRITERE = "1=1 &"-"[F:LNK]COA = '" + PARAMS(0) + "'"
+    If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+      Local Char YACCCOD(10): YACCCOD = vireblc(PARAMS(1),2)
+      CRITERE-= "& instr(1, tolower([F:LNK]ACCCOD), tolower('" + YACCCOD + "'))<>0"
+    Endif
+  Endif
+Return
+
+################################################################################à
+
+$SET_TITCOL_YBPC
+
+  Default File [LNK]
+
+  #Imposto Colonne Lookup
+  Call TEXTFIC("GACCCODE","ACCCOD",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:LNK]ACCCOD"
+  NBCOL += 1 : Call TEXTFIC("GACCCODE","DES",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:LNK]DES"
+
+Return

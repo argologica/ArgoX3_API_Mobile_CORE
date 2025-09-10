@@ -1,0 +1,65 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+$TSO_SOH
+  #Sub per SEL TIPO ORDINE  - SOH (OdV)
+  #NUM_COLS = 3
+  NUM_COLS = 5
+
+  #LINK
+  Link [YTSO] With [AXX]AXX0="TABSOHTYP";"DESAXX";GLANGUE;[F:YTSO]SOHTYP;[F:YTSO]LEG,
+&                  [AX3]AXX0="TABSOHTYP";"SHOAXX";GLANGUE;[F:YTSO]SOHTYP;[F:YTSO]LEG,
+&                  [YTSD]TSD0=[F:YTSO]SDHTYP;[F:YTSO]LEG
+&             As [LNK]
+
+#Where ([F:YTSO]SOHCAT = 1 & [F:YTSO]SOHTYP <> "SONBC")
+
+  If IS_MOBILE = 2
+
+    Gosub INIT_GRID
+    Filter [LNK] Order By [F:YTSO]SOHTYP
+    COUNT_VALUES = rowcount([LNK])
+
+    #sono le chiavi presenti in header e data del json di output
+#    FIELDS(0) = "SOHTYP" : FIELDS(1) = "SDHTYP" : FIELDS(2) = "LANDESSHO"
+
+    FIELDS(0) = "SOHTYP"
+    FIELDS(1) = "LANDESSHO"
+    FIELDS(2) = "SOHCAT"
+    FIELDS(3) = "CUSTOM3"
+    FIELDS(4) = "CUSTOM4"
+
+    NBCOL = 0
+  Else
+
+    GSELFAC = 1
+    TIT(0) = "Selezione Tipo Ordine"  # TODO: mettere messaggio?
+    ORDRE = "[F:YTSO]SOHTYP"
+    START = "[F:YTSO]SOHTYP"
+    DEFPAG = 1
+    NBCOL = 1
+
+    #Critere
+#    Local Char CRITERE(250)
+  Endif
+
+  Default File [LNK]
+
+  Call TEXTFIC("TABSOHTYP","SOHTYP",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="[F:YTSO]SOHTYP"
+  NBCOL += 1 : Call TEXTFIC("TABSOHTYP","LANDESSHO",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="func AFNC.TEXTRA('TABSOHTYP','LANDESSHO',[F:YTSO]SOHTYP,'')"
+  NBCOL+=1 : Call TEXTFIC("TABSOHTYP","SOHCAT",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="mess([F:YTSO]SOHCAT(0),412,1)"
+
+  NBCOL += 1 : Call TEXTFIC("TABSOHTYP","GFY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="string$([F:YTSO]LEG<>'',[F:YTSO]LEG)+string$([F:YTSO]LEG='',mess(91,187,1))"
+  NBCOL+=1 : Call TEXTFIC("TABSOHTYP","GFY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL)="string$([F:YTSO]GFY<>'',[F:YTSO]GFY)+string$([F:YTSO]GFY='',mess(220,117,1))"
+
+Return

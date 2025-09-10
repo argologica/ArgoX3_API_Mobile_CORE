@@ -1,0 +1,529 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+
+$ACTION
+
+#If GUSER='ADMIN' : Infbox(ACTION) : Endif
+
+  Case ACTION
+    When "OUVRE"         : Gosub OUVRE
+    When "DEBUT"         : Gosub DEBUT
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+Return
+
+###########################################################
+
+$OUVRE
+
+Return
+
+###########################################################
+
+$DEBUT
+  Call OUVRE_TRACE ("YAPP - YVBPC - Cerca Cliente - " - num$(date$)) From LECFIC
+  Call ECR_TRACE("# -- Cerca Cliente --- ",0) From GESECRAN
+Return
+
+###########################################################
+
+$FIN
+  Call FERME_TRACE From LECFIC
+Return
+
+#######################################################################################################################
+#**
+#* Inizializzazione - NOTA: Se la finestra è composta da più  maschere, aggiungere YCURRMSK1, YCURRMSKALIAS1,...
+#*!
+
+$INIT_FILE
+
+  Local Char YWINNAME(20): YWINNAME = "YVBPC"
+  Local Char YCURRMSK(20): YCURRMSK = "YVBPC"           #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSK1(20): YCURRMSK1 = "<Nome>"
+  Local Char YCURRMSKALIAS(20): YCURRMSKALIAS= "YVBPC"  #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSKALIAS1(20): YCURRMSKALIAS1 = "<NomeAlias>"
+  Local Char YACTION(20)
+  Local Char YCURRFIELD(20)
+Return
+
+########################################################################################################################
+################################################ SUBPROG /FUNPROG ######################################################
+########################################################################################################################
+
+#=============================================== AZIONI-CAMPO ==========================================================
+#BPCNUM: C,AM, SEL_OBJ (BPR)
+
+Subprog AS_BPNVBPC(BPCNUM,BPRNAM,EECNUM,BPAADD,YAX3MRESP,YRESPONSE,YBPCNUM,YBPRNAM,BPAADDLIG,CRY,POSCOD,CTY,TEL,WEB,FCYWEB)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char EECNUM
+  Variable Char BPAADD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YBPCNUM()
+  Variable Char YBPRNAM()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char POSCOD()
+  Variable Char CTY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+
+  Call OUVRE_TRACE("AS_BPNVBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YASBPNVBPC"
+  YCURRFIELD = "BPRNAM"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+Subprog C_BPCVBPC(BPCNUM, BPRNAM,EECNUM,BPAADD,YAX3MRESP,YRESPONSE,YBPCNUM,YBPRNAM,BPAADDLIG,CRY,POSCOD,CTY,TEL,WEB,FCYWEB)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char EECNUM
+  Variable Char BPAADD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YBPCNUM()
+  Variable Char YBPRNAM()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char POSCOD()
+  Variable Char CTY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+
+  Call OUVRE_TRACE("C_BPCVBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCBPCVBPC"
+  YCURRFIELD = "BPCNUM"
+  Local File BPCUSTOMER [F:YBPC]
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic: Controllo Anagrafica
+  If(vireblc(BPCNUM,2)<> AVOID.ACHAR)
+
+    Columns [F:YBPC](BPCNUM,BPCNAM)
+    Read [F:YBPC]BPC0 = toupper(BPCNUM)
+
+    If(fstat>0)
+      mkstat=2
+      YMESSAGE = "ATTENZIONE! Cliente non in anagrafica!"
+      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+    Else
+      mkstat=0
+      BPRNAM = [F:YBPC]BPCNAM
+      Call YAX3MOB_AFFZO(YCURRMSKALIAS,"BPRNAM") From YAX3MUTILS
+    Endif
+  Else
+    mkstat=0
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+######################################################################################
+#BPAADD: C, SEL_custom
+
+Subprog C_BPDDVBPC(BPCNUM, BPRNAM,EECNUM,BPAADD,YAX3MRESP,YRESPONSE,YBPCNUM,YBPRNAM,BPAADDLIG,CRY,POSCOD,CTY,TEL,WEB,FCYWEB)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char EECNUM
+  Variable Char BPAADD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YBPCNUM()
+  Variable Char YBPRNAM()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char POSCOD()
+  Variable Char CTY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+
+  Call OUVRE_TRACE("C_BPDDVBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCBPDDVBPC"
+  YCURRFIELD = "BPAADD"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic: query su tabella diversa
+  Local File ATEXTRA [LNK]
+  #prendo lo stesso dataset della SEL
+  Gosub SET_LINK_YBPC From YAX3MSELBPAADDLNK
+  Filter [LNK] Where [LNK]IDENT2 = toupper(BPAADD)
+
+  If(rowcount([LNK])=0)
+    mkstat = 2
+    YMESSAGE = "ATTENZIONE! Tipologia Indirizzo inesistente!"
+    Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+  Else
+    mkstat = 0
+    #YMESSAGE = [F:YBCG]BCGDES    #In YMESSAGE metto Descrizione Categoria inserito (valido)?
+  Endif
+  Filter [LNK]
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#############################################################################################
+#BOTTONE DI FINESTRA
+#############################################################################################
+
+Subprog YCRC_VBPC(YLAYOUT,BPCNUM,BPRNAM,EECNUM,BPAADD,YAX3MRESP,YRESPONSE,YBPCNUM,YBPRNAM,BPAADDLIG,CRY,POSCOD,CTY,TEL,WEB,FCYWEB)
+
+  Value Integer YLAYOUT
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char EECNUM
+  Variable Char BPAADD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YBPCNUM()
+  Variable Char YBPRNAM()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char POSCOD()
+  Variable Char CTY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+
+  Local Integer K,YI,YSUCCESS : YSUCCESS = 0
+
+  #Gestione Multimedia
+  Local Integer YMMEDIANUM: YMMMEDIANUM = 4 # N° azioni multimediali previste per ogni record
+  Local Char YMMACTIONS(250)(YMMMEDIANUM,2)
+  #Local Clbfile YMEDIA(1)(0..)
+  Local Char YMEDIA(250)(0..)      # array payload per ogni item
+
+  #apertura traccia
+  Call OUVRE_TRACE("YCRC_VBPC") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCRCVBPC"
+  YCURRFIELD = ""
+
+  #init: #parametrizzazioni iniziali :
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
+  YFUNC_NAME = "YVBPC" : YFUNC_TYPE = "CONS": YMSKALIAS = "YVBPC" : NUM_COLS=9 #num campi riquadro (per AX3M) (Gestione automatica?)
+
+  #business logic
+  #Tables + Critere + Link[LNK]
+  Gosub OPEN_FILES
+  Gosub SET_CRITERE
+  Gosub SET_LINK
+
+  #Filter LINK + rowcount
+  Filter [LNK] Where evalue(CRITERE) Order By [F:YBPC]BPCNUM;[F:YBPC]BPCNAM
+  COUNT_VALUES = rowcount([LNK])   #n° record trovati ( = N° righe riquadro)
+
+  If(COUNT_VALUES = 0)
+    YSUCCESS = 1
+    mkstat = 2
+  Else
+    YSUCCESS = 0
+
+    For [LNK]
+      YBPCNUM(YI)= [F:YBPC]BPCNUM
+      YBPRNAM(YI)= [F:YBPC]BPCNAM
+      BPAADDLIG(YI)= [F:YBPA]BPAADDLIG
+      CRY(YI) = [F:YBPA]CRY
+      POSCOD(YI) = [F:YBPA]POSCOD
+      CTY(YI) = [F:YBPA]CTY
+      TEL(YI)=[F:YBPA]TEL
+      #old [F:YBPA]WEB
+      WEB(YI)= [F:YBPA]WEB
+      FCYWEB(YI)= [F:YBPA]FCYWEB
+
+      YMEDIA(YI) = func YGETMEDIA(YMMACTIONS,BPAADDLIG(YI),CTY(YI),CRY(YI),TEL(YI),WEB(YI), func YUTILS.STR_IIF(vireblc(FCYWEB(YI),2)= AVOID.ACHAR, AVOID.ACHAR, func YUTILS.FIXURL(FCYWEB(YI))))
+
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"YBPCNUM",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"YBPRNAM",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"BPAADDLIG",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"CRY",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"POSCOD",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"CTY",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"TEL",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"WEB",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS,"FCYWEB",YI) From YAX3MUTILS
+
+      YI+=1
+    Next
+  Endif
+
+  #Popolamento
+  Call YAX3MOB_UPDATE_NBLIG(YCURRMSKALIAS,"NBLIG",COUNT_VALUES) From YAX3MUTILS
+
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+###################################################################################################
+
+Subprog YCLEARVBPC(BPCNUM,BPRNAM,EECNUM,BPAADD,YAX3MRESP,YRESPONSE,YBPCNUM,YBPRNAM,BPAADDLIG,CRY,POSCOD,CTY,TEL,WEB,FCYWEB)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char EECNUM
+  Variable Char BPAADD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char YBPCNUM()
+  Variable Char YBPRNAM()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char POSCOD()
+  Variable Char CTY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+
+  Call OUVRE_TRACE("YCLEARVBPC") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCLEARVBPC"
+  YCURRFIELD = ""
+
+  #init
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
+
+  #business logic
+  Raz BPCNUM,BPRNAM,EECNUM,BPAADD
+  For K = 0 To func YUTILS.COUNT(YBPCNUM) - 1
+    Raz YBPCNUM(K),YBPRNAM(K),BPAADDLIG(K),CRY(K),POSCOD(K),CTY(K),TEL(K),WEB(K) #dettaglio
+  Next
+
+  #end
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#################################################################################################
+#################################################################################################
+#**
+#* Apertura TABELLE PER link (contestuale)
+#*!
+
+$OPEN_FILES
+
+  Local File BPCUSTOMER [F:YBPC]
+  Local File BPARTNER [F:YBPR]
+  Local File BPADDRESS [F:YBPA]
+Return
+
+#################################################################################################
+#**
+#* LINK per consultazione (contestuale)
+#*!
+
+$SET_LINK
+
+  Link [YBPA] With [YBPC]BPC0~=[YBPA]BPANUM,
+&                  [YBPR]BPR0~=[YBPC]BPCNUM
+&             As [LNK]
+   Columns [LNK] ([F:YBPC]BPCNUM,[F:YBPC]BPCNAM,[F:YBPR]EECNUM,[F:YBPA]BPAADD,[F:YBPA]BPAADDLIG,[F:YBPA]CRY,[F:YBPA]POSCOD,
+&                 [F:YBPA]CTY,[F:YBPA]TEL,[F:YBPA]WEB,[F:YBPA]FCYWEB)
+
+Return
+
+############################################################################################
+#**
+#* CRITERE per consultazione (contestuale)
+#*!
+
+$SET_CRITERE
+
+  Local Char YTRIVCOND(10): YTRIVCOND = "1=1"
+  CRITERE(0) = YTRIVCOND                # "1=1"
+  CRITERE(1) = chr$(32)+"&"+YTRIVCOND   #" & 1=1"
+
+  If(vireblc(func YAX3MOB_SWFLDVAL(YFIELDS,BPCNUM,"BPCNUM"),2) <> AVOID.ACHAR)
+    #CRITERE(0)-="& instr(1, tolower([F:YBPC]BPCNUM), tolower('" + func YAX3MOB_SWFLDVAL(YFIELDS,BPCNUM,"BPCNUM") + "'))<>0"
+    CRITERE(0)-="& instr(1, tolower([F:YBPC]BPCNUM), tolower('" + BPCNUM + "'))<>0"
+  Endif
+
+  If(vireblc(func YAX3MOB_SWFLDVAL(YFIELDS,BPRNAM,"BPRNAM"),2) <> AVOID.ACHAR)
+    #CRITERE(0)-="& instr(1, tolower([F:YBPC]BPCNAM), tolower('" + func YAX3MOB_SWFLDVAL(YFIELDS,BPRNAM,"BPRNAM") + "'))<>0"
+    CRITERE(0)-="& instr(1, tolower([F:YBPC]BPCNAM), tolower('" + BPRNAM + "'))<>0"
+  Endif
+
+  If(vireblc(func YAX3MOB_SWFLDVAL(YFIELDS,EECNUM,"EECNUM"),2) <> AVOID.ACHAR)
+    #CRITERE(1)-="& instr(1, tolower([F:YBPR]EECNUM), tolower('" + func YAX3MOB_SWFLDVAL(YFIELDS,EECNUM,"EECNUM") + "'))<>0"
+    CRITERE(1)-="& instr(1, tolower([F:YBPR]EECNUM), tolower('" + EECNUM + "'))<>0"
+  Endif
+
+  If(vireblc(func YAX3MOB_SWFLDVAL(YFIELDS,BPAADD,"BPAADD"),2) <> AVOID.ACHAR)
+    #CRITERE(1)-="& [F:YBPA]BPAADD = '" + toupper(func YAX3MOB_SWFLDVAL(YFIELDS,BPAADD,"BPAADD")) + "'"
+    CRITERE(1)-="& [F:YBPA]BPAADD = '" + BPAADD + "'"
+  Endif
+
+Return
+
+##############################################################
+
+Funprog YAX3MOB_SWFLDVAL(YFIELDS,YPARAM,YFIELDCODE)
+
+  Variable Char YFIELDS()(,)
+  Value Char YPARAM
+  Value Char YFIELDCODE
+  Local Char YVALUE(250)
+  Const Integer YCOL_VALUE : YCOL_VALUE = 2
+
+  If(![V]GWEBSERV)
+    YVALUE = YPARAM
+  Else
+    Local Integer YI : YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)
+    YVALUE = YFIELDS(YI,YCOL_VALUE)
+  Endif
+
+End YVALUE
+
+##################################################################################################################
+#                         SOLO AX3M
+##################################################################################################################
+
+#$SET_AX3M_TIT_COL
+#
+#  Call TEXTFIC("BPCUSTOMER","BPCNUM",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPC]BPCNUM"
+#  NBCOL += 1 : Call TEXTFIC("BPCUSTOMER","BPCNAM",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPC]BPCNAM"
+#  NBCOL += 1 : Call TEXTFIC("BPADDRESS","BPAADDLIG",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPA]BPAADDLIG"
+#  NBCOL += 1 : Call TEXTFIC("BPADDRESS","CRY",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPA]CRY"
+#  NBCOL += 1 : Call TEXTFIC("BPADDRESS","POSCOD",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPA]POSCOD"
+#  NBCOL += 1 : Call TEXTFIC("BPADDRESS","CTY",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPA]CTY"
+#  NBCOL += 1 : Call TEXTFIC("BPADDRESS","TEL",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPA]TEL"
+#  NBCOL += 1 : Call TEXTFIC("AUTILIS","ADDEML",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPA]WEB"
+#  NBCOL += 1 : Call TEXTFIC("BPADDRESS","FCYWEB",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPA]FCYWEB"
+#
+#Return
+
+#-------------------------------------------------------------------------------------------------------
+
+$SET_AX3M_TIT_COL
+
+  Call TEXTFIC("BPCUSTOMER","BPCNUM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPC]BPCNUM"
+  NBCOL += 1 : Call TEXTFIC("BPCUSTOMER","BPCNAM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPC]BPCNAM"
+  NBCOL += 1 : Call TEXTFIC("BPADDRESS","BPAADDLIG",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPA]BPAADDLIG"
+  NBCOL += 1 : Call TEXTFIC("BPADDRESS","CRY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPA]CRY"
+  NBCOL += 1 : Call TEXTFIC("BPADDRESS","POSCOD",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPA]POSCOD"
+  NBCOL += 1 : Call TEXTFIC("BPADDRESS","CTY",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPA]CTY"
+  NBCOL += 1 : Call TEXTFIC("BPADDRESS","TEL",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPA]TEL"
+  NBCOL += 1 : Call TEXTFIC("AUTILIS","ADDEML",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPA]WEB"
+  NBCOL += 1 : Call TEXTFIC("BPADDRESS","FCYWEB",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPA]FCYWEB"
+
+  NBCOL += 1 : TIT(NBCOL)= "Azioni Multimediali"
+  COL(NBCOL) = AVOID.ACHAR
+
+Return
+
+###################################################################################################################
+
+#$SET_AX3M_FIELDS
+#
+#  FIELDS(0) = "YBPCNUM" : FIELDS(1) = "YBPRNAM" : FIELDS(2) = "BPAADDLIG"
+#  FIELDS(3) = "CRY" : FIELDS(4) = "POSCOD" : FIELDS(5) = "CTY"
+#  FIELDS(6) = "TEL" : FIELDS(7) = "WEB" : FIELDS(8) = "FCYWEB"
+#
+#Return
+
+#---------------------------------------------------------------------------------------------------------------------
+
+$SET_AX3M_FIELDS
+
+  FIELDS(0) = "YBPCNUM" : FIELDS(1) = "YBPRNAM" : FIELDS(2) = "BPAADDLIG"
+  FIELDS(3) = "CRY" : FIELDS(4) = "POSCOD" : FIELDS(5) = "CTY"
+  FIELDS(6) = "TEL" : FIELDS(7) = "WEB" : FIELDS(8) = "FCYWEB"
+  FIELDS(9) = "actions"
+
+Return
+
+####################################################################################################################
+####################################################################################################################
+#**
+#* GESTIONE MULTIMEDIA (per Ricerca Clienti)(YVBPC): ritorna payload per azioni multimediali
+#*
+#* @param YMMACTIONS Matrice con Enum Tipi azioni Multimediali (col=0), valori (col=1)
+#* @param YBPAADDLIG Indirizzo
+#* @param YCTY Città
+#* @param YCRY Stato
+#* @param YTEL N°Tel
+#* @param YWEB Mail
+#* @param YLINK Sito Web
+#*!
+
+Funprog YGETMEDIA(YMMACTIONS,YBPAADDLIG,YCTY,YCRY,YTEL,YWEB,YLINK)
+
+  Variable Char YMMACTIONS()(,)
+  Value Char YBPAADDLIG
+  Value Char YCTY
+  Value Char YCRY
+  Value Char YTEL
+  Value Char YWEB
+  Value Char YLINK
+
+  #Local Clbfile YJSONRESULT
+  Local Char YRESULT(250)
+  Gosub YMEDIACONST From YAX3MUTILS
+
+  If([V]GWEBSERV)
+    YMMACTIONS(0,0)= num$(CONST_EMAIL)
+    YMMACTIONS(1,0)= num$(CONST_PHONE)
+    YMMACTIONS(2,0)= num$(CONST_POSITION)
+    YMMACTIONS(3,0)= num$(CONST_LINK)
+
+    YMMACTIONS(0,1)= YWEB
+    YMMACTIONS(1,1)= YTEL
+    YMMACTIONS(2,1)= YBPAADDLIG + "," - YCTY + "," - YCRY
+    YMMACTIONS(3,1)= YLINK
+
+    YRESULT = func YAX3MUTILS.YGETMULTIMEDIA(YMMACTIONS)
+  Endif
+
+End YRESULT

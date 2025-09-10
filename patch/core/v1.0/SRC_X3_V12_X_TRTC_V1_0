@@ -1,4 +1,54 @@
 1,"Patch trattamenti core","ITA/FRA","1","YAX3C","X3","1",
+2,"TRT","SPEYAX3M",""
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+
+  Case ACTION
+    When "OUVRE"      : Gosub OUVRE
+    When "DEBUT"      : Gosub DEBUT
+  Endcase
+
+Return
+
+$OUVRE
+
+  Local Blbfile QRGPLAYSTORE_BLB, QRAPPLESTORE_BLB, QRCONFIG_BLB
+  Local Clbfile QRBASE64_CLB(3)
+  Local Integer COUNT
+  Local Char SUCCESS(5), MESSAGE(250)
+  Local Char PCOD(100)(1..10),PVAL(100)(1..10)
+
+Return
+
+$DEBUT
+
+  Call EXEC("AX3M_API_Prod", "GET", "api", "/Qr/GetGooglePlayStoreLink/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS
+
+  COUNT = b64Decode( QRBASE64_CLB, QRGPLAYSTORE_BLB )
+  [M:YAX3M]YQRANDROID = QRGPLAYSTORE_BLB
+
+  Affzo [M:YAX3M]YQRANDROID
+
+  Raz QRBASE64_CLB, PCOD, PVAL
+  Call EXEC("AX3M_API_Prod", "GET", "api", "/Qr/GetAppleStoreLink/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS
+
+  COUNT = b64Decode( QRBASE64_CLB, QRAPPLESTORE_BLB )
+  [M:YAX3M]YQRAPPLE = QRAPPLESTORE_BLB
+
+  Affzo [M:YAX3M]YQRAPPLE
+
+  Raz QRBASE64_CLB, PCOD, PVAL
+  Call EXEC("AX3M_API_Prod", "GET", "api", "/Qr/GetConfig/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS
+
+  COUNT = b64Decode( QRBASE64_CLB, QRCONFIG_BLB )
+  [M:YAX3M]YQRCONFIG = QRCONFIG_BLB
+
+  Affzo [M:YAX3M]YQRCONFIG
+
+
+Return
+**********
+7,"TRT","SPEYAX3M",""
 2,"TRT","YAX3MAUTHLIB",""
 #<AdxTL>@(#)0.0.0.0 $Revision$
 #########################################################################################
@@ -162,7 +212,12 @@ Subprog YCHECK_ACCESS_TOKEN(YACCESSTOKEN, YRESPONSE)
   Gosub GET_WS_CONSTANTS From YUTILS
 
   Local Clbfile ACCESSTOKEN_QUERY_CLB(2)
-  ACCESSTOKEN_QUERY_CLB = "select USERNAME_0, ATEXPIRACY_0 from YAX3MUSERTOK where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "' and AT_VALID_0 = " + num$(TRUE)
+  Case GTYPDBA
+    When 1 : # Oracle
+      ACCESSTOKEN_QUERY_CLB = "select USERNAME_0, ATEXPIRACY_0 from YAX3MUSERTOK where DBMS_LOB.INSTR(ACCESSTOKEN_0, '" + YACCESSTOKEN + "') > 0 and AT_VALID_0 = " + num$(TRUE)
+    When 2 : # Sql
+      ACCESSTOKEN_QUERY_CLB = "select USERNAME_0, ATEXPIRACY_0 from YAX3MUSERTOK where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "' and AT_VALID_0 = " + num$(TRUE)
+  Endcase
 
   Local Char ACCESSTOKEN_QUERY(250)(3)
   Call YCLB2STRARR(ACCESSTOKEN_QUERY_CLB, ACCESSTOKEN_QUERY) From YUTILS
@@ -240,7 +295,15 @@ Subprog YINV_TOKEN(YACCESSTOKEN, YRESPONSE)
   Local Clbfile ACCESSTOKEN_QUERY_CLB(0), TOKEN_QUERY_CLB(0)
   Local Char ACCESSTOKEN_QUERY(250)(3), TOKEN_QUERY(250)(3)
 
-  Setlob ACCESSTOKEN_QUERY_CLB With "select count(*) from YAX3MUSERTOK where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "' and AT_VALID_0 = " + num$(TRUE)
+  Case GTYPDBA
+    When 1 : # Oracle
+      TOKEN_QUERY_CLB = "update YAX3MUSERTOK set AT_VALID_0 = 1, RT_VALID_0 = 1, UPDDATTIM_0 = SYS_EXTRACT_UTC(SYSTIMESTAMP) where DBMS_LOB.INSTR(ACCESSTOKEN_0, '" + YACCESSTOKEN + "') > 0"
+      Setlob ACCESSTOKEN_QUERY_CLB With "select count(*) from YAX3MUSERTOK where DBMS_LOB.INSTR(ACCESSTOKEN_0, '" + YACCESSTOKEN + "') > 0 and AT_VALID_0 = " + num$(TRUE)
+    When 2 : # Sql
+      TOKEN_QUERY_CLB = "update YAX3MUSERTOK set AT_VALID_0 = 1, RT_VALID_0 = 1, UPDDATTIM_0 = GETUTCDATE() where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "'"
+      Setlob ACCESSTOKEN_QUERY_CLB With "select count(*) from YAX3MUSERTOK where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "' and AT_VALID_0 = " + num$(TRUE)
+  Endcase
+
   Call YCLB2STRARR(ACCESSTOKEN_QUERY_CLB, ACCESSTOKEN_QUERY) From YUTILS
 
   Local Tinyint IS_INVALIDTOKEN
@@ -248,7 +311,7 @@ Subprog YINV_TOKEN(YACCESSTOKEN, YRESPONSE)
 
   For (Integer YCOUNT_USERTOK) From num$(GTYPDBA*2+1) Sql ACCESSTOKEN_QUERY As [YAX3A]
     If YCOUNT_USERTOK > 0
-      TOKEN_QUERY_CLB = "update YAX3MUSERTOK set AT_VALID_0 = 1, RT_VALID_0 = 1, UPDDATTIM_0 = GETUTCDATE() where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "'"
+
       Call YCLB2STRARR(TOKEN_QUERY_CLB, TOKEN_QUERY) From YUTILS
 
       Trbegin [YAX3MUT]
@@ -292,13 +355,13 @@ $YAX3MOB_INIT
   #4-LOG- STAMPE in INIT -lato Mobile
   If([V]GWEBSERV)
     #Stampa: yax3mresp.json
-    Call YPRINT_DIR_CLB(YLOGDIRNAME, YAX3MRESP, "YAX3MRESP_" + YACTION, "json") From YUTILS
+    Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, YAX3MRESP, "YAX3MRESP_" + YACTION, "json") From YUTILS
 
     #Stampa: init-fields.txt
     If(CURRENTROW = -1)
-      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "init", YFIELDS, YACTION, YCURRENTUSER) From YAX3MUTILS
+      Call YAX3MOB_PRINT_DIR_YFIELDS(YPAYLOADDIRNAME, "init", YFIELDS, YACTION, YCURRENTUSER) From YAX3MUTILS
     Else
-      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "init", YFIELDS, YACTION-"-row"+num$(CURRENTROW),YCURRENTUSER) From YAX3MUTILS
+      Call YAX3MOB_PRINT_DIR_YFIELDS(YPAYLOADDIRNAME, "init", YFIELDS, YACTION-"-row"+num$(CURRENTROW),YCURRENTUSER) From YAX3MUTILS
     Endif
   Endif
 Return
@@ -310,17 +373,31 @@ Return
 
 $YAX3MOB_SET_ENV
 
-  Local Clbfile YLOGTEXT(2)                                                 #Clob per LOG
-  Local Char YLOGDIRNAME(20): YLOGDIRNAME = "ArgoX3Mobile_Log"              #Nome cartella Log per AX3M #!! --> PARAMETRO GENERALE su X3Cloud
-  Local Char YLOGFIL(25): YLOGFIL = "AX3M_Log_"+format$("D:YYYYMMDD",date$) #Nome File Log
-  #Local Char YLOGDIRPATH(250)
-  Local Integer YLOGDIR_EXIST,YI,YJ
-  Local Char YFILA(250)
-  Local Char YLOG_EXT(6): YLOG_EXT = "log"
-  Local Char YBASEPATH(250):YBASEPATH = filpath("","","")
-  Local Char YIDENT(30): YIDENT = num$(adxuid(1))
+  Local Clbfile YLOGTEXT(2)                                                     #Clob per LOG
+  Local Char YAX3MDIRNAME(20): YAX3MDIRNAME = "AX3M"                            #Nome Cartella AMBIENTE
+  Local Char YLOGDIRNAME(20): YLOGDIRNAME = YAX3MDIRNAME + "\LOG"
+  Local Char YPAYLOADDIRNAME(20): YPAYLOADDIRNAME = YAX3MDIRNAME + "\PAYLOAD"
+  Local Char YLOGFIL(25): YLOGFIL = format$("D:YYYYMMDD",date$)                 #Nome File Log
+  Local Integer STAT
 
-  #variabili per parametri azione
+  Local Integer YI,YJ
+  Local Char YFILA(250)
+  Local Char YBASEPATH(250):YBASEPATH = filpath("","","")
+
+  Local Char YIDENT(30): YIDENT = num$(adxuid(1))    #identificativo
+
+  #Creazione cartella ambiente per Log: AX3M e sotto cartelle (LOG, PAYLOAD), se non esistono
+  If filinfo(filpath("","","")+"\"+YAX3MDIRNAME, 7) <= 0 # non esiste
+    Call SYSTEME(adxmac(0), 'ae_mkdir - "' + filpath("","","")+"\"+YAX3MDIRNAME + '"', "", STAT) From ORDSYS
+  Endif
+  If filinfo(filpath("","","")+"\"+YLOGDIRNAME, 7) <= 0 # non esiste
+    Call SYSTEME(adxmac(0), 'ae_mkdir - "' + filpath("","","")+"\"+YLOGDIRNAME + '"', "", STAT) From ORDSYS
+  Endif
+  If filinfo(filpath("","","")+"\"+YPAYLOADDIRNAME, 7) <= 0 # non esiste
+    Call SYSTEME(adxmac(0), 'ae_mkdir - "' + filpath("","","")+"\"+YPAYLOADDIRNAME + '"', "", STAT) From ORDSYS
+  Endif
+
+  #Setto le variabili per parametri azione
   Local Char YPARAM(50),YPARVAL(60)
   If clalev([F:YATR])=0 : Local File ACTPAR [F:YATR] : Endif
   Local Char YEXCLUDE_PARAMS(20)(3)   #array con codici dei parametri da escludere
@@ -328,18 +405,7 @@ $YAX3MOB_SET_ENV
   YEXCLUDE_PARAMS(1)="YRESPONSE"
   YEXCLUDE_PARAMS(2)="RESPONSE"
 
-  #1-CREAZIONE eventuale CRT/FILE di LOG
-  Local Char YLOGPATH(250): YLOGPATH = YBASEPATH+"\"+YLOGDIRNAME     #Percorso per cartella Log AX3M
-  Local Char YAX3MLOG_FILPATH(250): YAX3MLOG_FILPATH = YLOGPATH+"\"+YLOGFIL
-  YLOGDIR_EXIST = filinfo(YLOGPATH,7) #controllo se esiste la crt
-
-  #se non esiste la crt per Log, la creo
-  If(YLOGDIR_EXIST < 0)
-    Call YCREATE_DIRECTORY(YBASEPATH,YLOGDIRNAME) From YUTILS
-  Endif
-  #Call YCREATE_DIRECTORY(YBASEPATH,"AA") From YUTILS
-
-  YFILA=filpath(YLOGDIRNAME, YLOGFIL, YLOG_EXT)  #gestione file
+  #YFILA=filpath(YLOGDIRNAME, YLOGFIL, YLOG_EXT)  #gestione file
 Return
 
 ##############################################################################################################
@@ -362,7 +428,7 @@ $YAX3MOB_SET_HEADER
 
   For [F:YATR]
     YPARAM = evalue("[F:YATR]CODPAR")    #codice parametro
-    YDIME = func YAX3MUTILS.YGET_DIME(func YAX3MUTILS.YGET_SUBPRGNAME(YACTION),YPARAM)
+    YDIME = func YAX3MUTILS.YGET_DIMEPARAM(func YAX3MUTILS.YGET_SUBPRGNAME(YACTION),YPARAM)
     YPOS = func YUTILS.IIF(CURRENTROW = -1, 0, CURRENTROW)
 
     If(YDIME=1)
@@ -399,11 +465,11 @@ $YAX3MOB_END
   If(GWEBSERV)
     #LOGGING(STAMPE): print end matrix: YFIELDS_end + print YRESPONSE
     If(CURRENTROW = -1)
-      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "end", YFIELDS, YACTION, YCURRENTUSER) From YAX3MUTILS
-      Call YPRINT_DIR_CLB(YLOGDIRNAME, YRESPONSE, "YRESPONSE_" + YACTION +"_("+YCURRENTUSER+")", "json") From YUTILS
+      Call YAX3MOB_PRINT_DIR_YFIELDS(YPAYLOADDIRNAME, "end", YFIELDS, YACTION, YCURRENTUSER) From YAX3MUTILS
+      Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, YRESPONSE, "YRESPONSE_" + YACTION +"_("+YCURRENTUSER+")", "json") From YUTILS
     Else
-      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "end", YFIELDS, YACTION-"-row"+num$(CURRENTROW),YCURRENTUSER) From YAX3MUTILS
-      Call YPRINT_DIR_CLB(YLOGDIRNAME, YRESPONSE, "YRESPONSE_" + YACTION-"-row"+num$(CURRENTROW)+"_("+YCURRENTUSER+")", "json") From YUTILS
+      Call YAX3MOB_PRINT_DIR_YFIELDS(YPAYLOADDIRNAME, "end", YFIELDS, YACTION-"-row"+num$(CURRENTROW),YCURRENTUSER) From YAX3MUTILS
+      Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, YRESPONSE, "YRESPONSE_" + YACTION-"-row"+num$(CURRENTROW)+"_("+YCURRENTUSER+")", "json") From YUTILS
     Endif
   Endif
 
@@ -425,7 +491,6 @@ Subprog YAX3MOB_ECRTRACE(YMKSTAT,YMESSAGE)
 
   Local Char YTYPELOG(10)
 #TODO:metti come parametro generale : "ArgoX3Mobile_Log"
-  Local Char YFILA(250) : YFILA = filpath("ArgoX3Mobile_Log","AX3M_Log_"+format$("D:YYYYMMDD",date$),"log")
   Local Char YIDENT(30): YIDENT = num$(adxuid(1))
   Local Clbfile YMESS
 
@@ -437,7 +502,7 @@ Subprog YAX3MOB_ECRTRACE(YMKSTAT,YMESSAGE)
     When Default
   Endcase
 
-  YMESS = func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-YTYPELOG+":"-YMESSAGE
+  YMESS = func YUTILS.YGET_TIMESTAMP() - "-" - YIDENT - "-" - YTYPELOG + ":" - YMESSAGE
   Call YWRITE(YMESS)
 End
 
@@ -448,10 +513,11 @@ End
 #* @param YMESSAGE Messaggio da tracciare
 #*!
 
+#PRIVATE
 Subprog YWRITE(YMESSAGE)
 
   Value Clbfile YMESSAGE
-  Local Char YFILA(250) : YFILA = filpath("ArgoX3Mobile_Log","AX3M_Log_"+format$("D:YYYYMMDD",date$),"log")
+  Local Char YFILA(250) : YFILA = filpath("AX3M\LOG", format$("D:YYYYMMDD",date$),"log")
 
   Openo YFILA Using [YF1]
   Iomode adxifs ";" Using [YF1]
@@ -566,7 +632,7 @@ Subprog YPROTOCOL(FUNCTION, YRESPONSE)
       # blocks
       B = 0
       For I = 0 To 14
-        If [F:YVPR]RANG(I) > 0
+        If [F:YVPR]RANG(I) > 0 & [F:YVPR]YVISBLOC(I) = 2
           #DIVIDO PER 5, PERCHè IN DOT NET LA FUNZIONE SORTSCREENS FA UN COMPARE CON IL NUMERO DI BLOCCO DEL CAMPO CHE PARTE DA 1 E NON E' IN M ULTIPLI DI 5
           YBLOCK_FIELDS(0)= func YJSONSERIALIZE.GET_INT("blockNumber", [F:YVPR]RANG(I) / 5, 1)
           YBLOCK_FIELDS(1)= func YJSONSERIALIZE.GET_STR("blockTitle", [F:YVPR]SBTEXTE(I), 1)
@@ -585,7 +651,7 @@ Subprog YPROTOCOL(FUNCTION, YRESPONSE)
     Next
 
     WINDOWFIELDS_INDEX+=1
-    YWINDOW_FIELDS(WINDOWFIELDS_INDEX)= func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("screens", YSCREENS, 1)
+    YWINDOW_FIELDS(WINDOWFIELDS_INDEX) = func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("screens", YSCREENS, 1)
 #    WINDOWFIELDS_INDEX+=1
 #    YWINDOW_FIELDS(WINDOWFIELDS_INDEX)= func YJSONSERIALIZE.GET_EMPTYARRAY("buttons", 0)
     YACTION_FIELDS(12) = func YJSONSERIALIZE.GET_CLBOBJ("window", YWINDOW_FIELDS, 0, 1)
@@ -593,6 +659,9 @@ Subprog YPROTOCOL(FUNCTION, YRESPONSE)
     Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
   Next
 #Call YPRINT_CLB(YRESPONSE, "YRESPONSE", "json") From YUTILS
+
+  Call FERME_TRACE From LECFIC
+
 End
 
 #######################################################################################################
@@ -619,8 +688,9 @@ Subprog YWINBTS(WINCODE, YRESPONSE)
 &                 Order By Key CLE=CODBOUT;CODPAR
 
   Local Clbfile YPARAMETERS(1)(0..), YBUTTONS(1)(0..)
+  Local Integer YROWCOUNT : YROWCOUNT = rowcount([F:YVWB])
+  If YROWCOUNT > 0
 
-  If !fstat
     YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
 
     For [F:YVWB]CLE(1)
@@ -673,6 +743,7 @@ Subprog YWINBTS(WINCODE, YRESPONSE)
   Endif
 
 #Call YPRINT_CLB(YRESPONSE, "YRESPONSE", "json") From YUTILS
+  Call FERME_TRACE From LECFIC
 End
 
 ##########################################################################################
@@ -699,7 +770,8 @@ Subprog YSCRFLD(SCREENCODE, YRESPONSE)
   Filter [F:YVSF] Where evalue(YCRITERE)
 &                 Order By Key CLE=CODZON;ACTION;NOPAR
 
-  If !fstat
+  Local Integer YROWCOUNT : YROWCOUNT = rowcount([F:YVSF])
+  If YROWCOUNT > 0
     Local Clbfile YFIELDS(1)(0..)
     Local Char YLOCALMENUS(250)(0..)
 
@@ -753,7 +825,6 @@ Subprog YSCRFLD(SCREENCODE, YRESPONSE)
       L = 0
       For [F:YVSF]CLE(2)
         If vireblc([F:YVSF]ACTION, 2) <> AVOID.ACHAR
-
           Raz YACTION_ITEMS  # Pulizia dei dati precedenti
           YACTION_ITEMS(0) = func YJSONSERIALIZE.GET_STR("code", [F:YVSF]ACTION, 1)
           YACTION_ITEMS(1) = func YJSONSERIALIZE.GET_INT("number", [F:YVSF]LANNUM, 1)
@@ -764,7 +835,6 @@ Subprog YSCRFLD(SCREENCODE, YRESPONSE)
           Raz YPARAMETERS  # Azzeramento array parametri
           K = 0
           For [F:YVSF]CLE(3)
-
             YPARAM_FIELDS(0) = func YJSONSERIALIZE.GET_STR("parameterCode", [F:YVSF]CODPAR, 1)
             YPARAM_FIELDS(1) = func YJSONSERIALIZE.GET_STR("parameterValue", [F:YVSF]VALPAR, 1)
             YPARAM_FIELDS(2) = func YJSONSERIALIZE.GET_INT("parameterType", [F:YVSF]TYPPAR, 1)
@@ -793,8 +863,10 @@ Subprog YSCRFLD(SCREENCODE, YRESPONSE)
     YRESPONSE += func YJSONSERIALIZE.GET_CLBARRAY_FROM_CLBARRAY("fields", YFIELDS, 1)
     YRESPONSE += func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
   Endif
+  Filter [F:YVSF]
 
-Call YPRINT_CLB(YRESPONSE, "YRESPONSE", "json") From YUTILS
+  Call FERME_TRACE From LECFIC
+
 End
 
 #######################################################################################################
@@ -818,7 +890,8 @@ Subprog YACTFLDPAR(SCREENCODE, FIELDCODE, YRESPONSE)
   Filter [F:YVFAP] Where evalue(YCRITERE)
 &                  Order By Key CLE = ACTION;NOPAR
 
-  If !fstat
+  Local Integer YROWCOUNT : YROWCOUNT = rowcount([F:YVFAP])
+  If YROWCOUNT > 0
     Local Clbfile YPARAMETERS(1)(rowcount([F:YVFAP]))  # Array per i parametri
     Local Clbfile YACTION(1)(rowcount([F:YVFAP]))  # Array per le azioni
 
@@ -861,6 +934,8 @@ Subprog YACTFLDPAR(SCREENCODE, FIELDCODE, YRESPONSE)
 
   Endif
 
+  Call FERME_TRACE From LECFIC
+
 End
 
 ##########################################################################################
@@ -887,7 +962,8 @@ Subprog YSCRFLDTYP(FIELDTYPE, YRESPONSE)
   Filter [F:YVSFT] Where evalue(YCRITERE)
 &                  Order By Key CLE = CODTYP;NOLIB;LANNUM
 
-  If !fstat
+  Local Integer YROWCOUNT : YROWCOUNT = rowcount([F:YVFAP])
+  If YROWCOUNT > 0
 
     Local Clbfile YLOCALMENUS(1)(rowcount([F:YVSFT]))
     YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
@@ -920,6 +996,8 @@ Subprog YSCRFLDTYP(FIELDTYPE, YRESPONSE)
     YRESPONSE += func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
 
   Endif
+
+  Call FERME_TRACE From LECFIC
 
 End
 **********
@@ -1040,8 +1118,12 @@ Call OUVRE_TRACE("SEL_BASECUSTOM-"-FUNCTION-"-"-TYPE_FIELD) From LECFIC
   Endif
 
   #log-SEL_custom
-  Call YPRINT_DIR_CLB(YLOGDIRNAME,RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
+  #Call YPRINT_DIR_CLB(YLOGDIRNAME,RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
   #Call YPRINT_CLB(RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
+
+  #END_SELCUSTOM_LOG
+  Gosub YAX3MOB_SET_ENV From YAX3MLOG
+  Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
 
 Call FERME_TRACE From LECFIC
 
@@ -1206,8 +1288,13 @@ Subprog SEL_OBJ(OBJECT, QUERY, RESPONSE)
     Endif
 
     #LOG-SEL_OBJ
-    Call YPRINT_DIR_CLB(YLOGDIRNAME,RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
+    #Call YPRINT_DIR_CLB(YLOGDIRNAME,RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
     #Call YPRINT_CLB(RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
+
+    #END_SELOBJ_LOG
+    Gosub YAX3MOB_SET_ENV From YAX3MLOG
+    Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
+
   Endif
 
 Call FERME_TRACE From LECFIC
@@ -1298,8 +1385,11 @@ $SET_HEADERVALUES
       If(HEADER(INDEX_HEADER, 0)<>"actions")
         VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), num$(evalue(COL(INDEX_HEADER))), 1)
       Else
-        #No gestione multimedia
+        #Gestione multimedia
+Call ECR_TRACE("gestione Multimedia -header :" - HEADER(INDEX_HEADER, 0),0) From GESECRAN
         VALUES(INDEX_VALUES, INDEX_HEADER) =  YMEDIA(INDEX_VALUES)
+
+Call ECR_TRACE("values :" -  VALUES(INDEX_VALUES, INDEX_HEADER),0) From GESECRAN
       Endif
       #VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), evalue(COL(INDEX_HEADER)), 1)
       INDEX_VALUES+=1
@@ -1403,7 +1493,11 @@ $SEL_CONS
   Endif
 
   #log-SEL_CONS
-  Call YPRINT_CLB(YRESPONSE, "YRESPONSE_" + "selcons_"+YFUNC_NAME, "json") From YUTILS
+  #Call YPRINT_CLB(YRESPONSE, "YRESPONSE_" + "selcons_"+YFUNC_NAME, "json") From YUTILS
+
+  #END_SELCONS
+  Gosub YAX3MOB_SET_ENV From YAX3MLOG
+  Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, YRESPONSE, "YRESPONSE_" + "selcons_"+YFUNC_NAME, "json") From YUTILS
 Return
 **********
 7,"TRT","YAX3MSEL",""
@@ -1854,7 +1948,7 @@ $YAX3MOB_INIT_ACTIONFIELD
   Endif
 
   #LOG
-  Gosub YAX3MOB_INITLOG
+  Gosub YAX3MOB_INIT From YAX3MLOG
 
 Return
 
@@ -2973,7 +3067,7 @@ $YAX3MOB_END_ACTIONFIELD
   Endif
 
   #LOG (END):
-  Gosub YAX3MOB_ENDLOG
+  Gosub YAX3MOB_END From YAX3MLOG
 Return
 
 ##################################################################################################################
@@ -2999,7 +3093,7 @@ $YAX3MOB_END_ACTIONFIELD_NOFOCUS
   Endif
 
   #LOG (END):
-  Gosub YAX3MOB_ENDLOG
+  Gosub YAX3MOB_END From YAX3MLOG
 Return
 
 ####################################################################################################################
@@ -3066,33 +3160,33 @@ $YAX3MOB_END_BUTTONACTION
     If(toupper(YFUNC_TYPE)="CONS")
 
       #Esiste anche la chiave "actions" (per gestione Multimedia)
+      #If(func YUTILS.COUNT(YMEDIA)>0 & COUNT_VALUES >0)
       If(type(YMEDIA)>0 & func YUTILS.COUNT(YMEDIA)>0 & COUNT_VALUES >0)
         NUM_COLS +=1
+        Call ECR_TRACE("NUm Col Griglia(con MEDIA):"-num$(NUM_COLS),0) From GESECRAN
       Endif
 
       If(COUNT_VALUES >0)
         Gosub SEL_CONS From YAX3MSEL
-        #Gosub SEL_CONS From YAX3MSELTMP
       Endif
     Else
       Gosub YAX3MOB_BUTTONGLOBALSET
 
-      If(CURRENTROW =-1)
-        Call YAX3MOB_PRINT_YFIELDS("end", YFIELDS, YACTION)
-      Else
-        Call YAX3MOB_PRINT_YFIELDS("end", YFIELDS, YACTION-"- row"-num$(CURRENTROW))
-      Endif
+#      If(CURRENTROW =-1)
+#        Call YAX3MOB_PRINT_YFIELDS("end", YFIELDS, YACTION)
+#      Else
+#        Call YAX3MOB_PRINT_YFIELDS("end", YFIELDS, YACTION-"- row"-num$(CURRENTROW))
+#      Endif
 
       YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA,YSELECTEDFIELDS)
-      #YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
 
-      #LOG YRESPONSE
-      Call YPRINT_CLB(YRESPONSE, "YRESPONSE_" + YACTION, "json") From YUTILS
-    Endif
-  Else
-    If(toupper(YFUNC_TYPE)="CONS" & COUNT_VALUES =0)
+      #LOG YRESPONSE (vecchia versione)
+      #Call YPRINT_CLB(YRESPONSE, "YRESPONSE_" + YACTION, "json") From YUTILS
 
+      #LOG (END):
+      Gosub YAX3MOB_END From YAX3MLOG
     Endif
+
   Endif
 Return
 
@@ -3463,6 +3557,7 @@ Subprog YAX3MOB_RAZRIQUADRO(YFIELDS,YMSKALIAS)
   Local Integer YI,YJ,YK
   Local Char YDETTFLDCODES(250)(50)
   Local Char YDFLDCODE(250)
+  Local Char YTMPFIELDS(250)(dim(YFIELDS,1),dim(YFIELDS,2))
 
   If(GWEBSERV)
     For YI =0 To dim(YFIELDS,1)-1
@@ -3481,6 +3576,7 @@ Subprog YAX3MOB_RAZRIQUADRO(YFIELDS,YMSKALIAS)
         Endif
       Endif
     Next
+    Call YHANDLEMAT(YFIELDS,YTMPFIELDS) From YUTILS  #qui tolgo le righe vuote , riconfiguro la matrice
   Else
     #imposto  a 0(esempio: NBLIG = 0)
     Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKALIAS & [F:YAMZ]DIME = 0)
@@ -3550,10 +3646,10 @@ Subprog YAX3MOB_IMPORTSIL(YIMPORT_MODEL, YCSVTEXT, YSUCCESS, YMESSAGE)
     #YMESSAGE = func YUTILS.IIF(vireblc(YMESSAGE, 2) <> AVOID.ACHAR, YMESSAGE, func YAX3MOBGET_TRACE(GTRACE))
 
     #Call ECR_TRACE("Stato import:" - num$(YSUCCESS) - " - Messaggio:" - YMESSAGE,0) From GESECRAN
-    Call YAX3MOB_ECRTRACE(0,"Stato import:" - num$(YSUCCESS) - " - Messaggio:" - YMESSAGE) From  YAX3MUTILS  #log
+    Call YAX3MOB_ECRTRACE(0,"Stato import:" - num$(YSUCCESS) - " - Messaggio:" - YMESSAGE) From  YAX3MLOG  #log
   Else
     #Call ECR_TRACE("Modello di Import non esistente",0) From GESECRAN
-    Call YAX3MOB_ECRTRACE(2,"Modello di Import non esistente") From  YAX3MUTILS     #log
+    Call YAX3MOB_ECRTRACE(2,"Modello di Import non esistente") From YAX3MLOG     #log
   Endif
 End
 
@@ -4110,198 +4206,6 @@ $YMEDIACONST
   Const Integer CONST_POSITION: CONST_POSITION = 2
   Const Integer CONST_LINK: CONST_LINK = 3
 Return
-
-##################################################################################################################
-#                                                   GESTIONE LOG AX3M
-##################################################################################################################
-#**
-#* Init del Log: 1-Creazione (eventuale) ambiente per il Log; 2-Composizione Intestazione;
-#* 3-Stampa Log ; 4-Stampe : yax3mresp.json, init-fields.txt
-#*!
-
-$YAX3MOB_INITLOG
-
-  Gosub YAX3MOB_SET_ENVLOG       #1-LOG ENVIRONMENT
-  #Gosub YAX3MOB_SET_HEADERLOG    #2-COMPOSIZIONE INTESTAZIONE
-  # Gosub YAX3MOB_SET_HEADERLOG From YAX3MUTILS_BETA
-
-  #3-STAMPA:(yutils)
-  #Call YWRITE_LOG(YLOGTEXT)
-  #Raz YLOGTEXT
-
-  #4-LOG- STAMPE in INIT -lato Mobile
-  If([V]GWEBSERV)
-    #Stampa: yax3mresp.json
-    Call YPRINT_DIR_CLB(YLOGDIRNAME, YAX3MRESP, "YAX3MRESP_" + YACTION, "json") From YUTILS
-
-    #Stampa: init-fields.txt
-    If(CURRENTROW = -1)
-      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "init", YFIELDS, YACTION, YCURRENTUSER) From YAX3MUTILS
-    Else
-      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "init", YFIELDS, YACTION-"-row"+num$(CURRENTROW),YCURRENTUSER) From YAX3MUTILS
-    Endif
-  Endif
-Return
-
-#########################################################################################################
-#**
-#* Sub per Creazione (eventuale) Ambiente per il Log
-#*!
-
-$YAX3MOB_SET_ENVLOG
-
-  Local Clbfile YLOGTEXT(2)                                                 #Clob per LOG
-  Local Char YLOGDIRNAME(20): YLOGDIRNAME = "ArgoX3Mobile_Log"              #Nome cartella Log per AX3M #!! --> PARAMETRO GENERALE su X3Cloud
-  Local Char YLOGFIL(25): YLOGFIL = "AX3M_Log_"+format$("D:YYYYMMDD",date$) #Nome File Log
-  #Local Char YLOGDIRPATH(250)
-  Local Integer YLOGDIR_EXIST,YI,YJ
-  Local Char YFILA(250)
-  Local Char YLOG_EXT(6): YLOG_EXT = "log"
-  Local Char YBASEPATH(250):YBASEPATH = filpath("","","")
-  Local Char YIDENT(30): YIDENT = num$(adxuid(1))
-
-  #variabili per parametri azione
-  Local Char YPARAM(50),YPARVAL(60)
-  If clalev([F:YATR])=0 : Local File ACTPAR [F:YATR] : Endif
-  Local Char YEXCLUDE_PARAMS(20)(3)   #array con codici dei parametri da escludere
-  YEXCLUDE_PARAMS(0)="YAX3MRESP"
-  YEXCLUDE_PARAMS(1)="YRESPONSE"
-  YEXCLUDE_PARAMS(2)="RESPONSE"
-
-  #1-CREAZIONE eventuale CRT/FILE di LOG
-  Local Char YLOGPATH(250): YLOGPATH = YBASEPATH+"\"+YLOGDIRNAME     #Percorso per cartella Log AX3M
-  Local Char YAX3MLOG_FILPATH(250): YAX3MLOG_FILPATH = YLOGPATH+"\"+YLOGFIL
-  YLOGDIR_EXIST = filinfo(YLOGPATH,7) #controllo se esiste la crt
-
-  #se non esiste la crt per Log, la creo
-  If(YLOGDIR_EXIST < 0)
-    Call YCREATE_DIRECTORY(YBASEPATH,YLOGDIRNAME) From YUTILS
-  Endif
-  #Call YCREATE_DIRECTORY(YBASEPATH,"AA") From YUTILS
-
-  YFILA=filpath(YLOGDIRNAME, YLOGFIL, YLOG_EXT)  #gestione file
-Return
-
-##############################################################################################################
-#**
-#* Sub per Intestazione Log per Az.Campo e Az.Bottone Finestra. Struttura : Timestamp-Identificativo-Testo ;
-#* Operazioni : 1-Cod.Azione(WS), 2-Set dei parametri, 3- Cod.Utente
-#*!
-
-$YAX3MOB_SET_HEADERLOG
-
-  Append YLOGTEXT, chr$(10)  # una riga vuota tra un'azione e l'altra
-  Append YLOGTEXT, func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-"ACTION:"- func YAX3MUTILS.YGET_SUBPRGNAME(YACTION)+chr$(10)
-  Append YLOGTEXT, func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-"PARAMS:"
-
-  #Filtro i parametri dell'azione
-  Local Integer YNUMPAR,YPOS,YDIME
-  Columns [F:YATR] (CODPAR)
-  Filter [F:YATR] Where ([F:YATR]ACTION = YACTION & !find([F:YATR]CODPAR,YEXCLUDE_PARAMS))
-  YNUMPAR = rowcount([F:YATR])
-
-  For [F:YATR]
-    YPARAM = evalue("[F:YATR]CODPAR")    #codice parametro
-    YDIME = func YGET_DIMEPARAM(func YAX3MUTILS.YGET_SUBPRGNAME(YACTION),YPARAM)
-    YPOS = func YUTILS.IIF(CURRENTROW = -1, 0, CURRENTROW)
-
-    If(YDIME=1)
-      YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM))) #val param
-    Else
-      If(YDIME >1)
-        If(YPARAM = YCURRFIELD)
-          If(!GWEBSERV)
-            YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(0)+")")))
-          Else
-            YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(YPOS)+")")))
-          Endif
-        Else
-          YPARVAL = func YUTILS.STR_IIF(vireblc(num$(evalue(YPARAM)),2)= AVOID.ACHAR, "empty",num$(evalue(YPARAM+"("+num$(YPOS)+")")))
-        Endif
-      Endif
-    Endif
-
-    Append YLOGTEXT,func YUTILS.STR_IIF(YI>0, chr$(32), AVOID.ACHAR)-YPARAM+":"-YPARVAL-func YUTILS.STR_IIF(YI<YNUMPAR,"-",AVOID.ACHAR)
-    YI +=1
-  Next
-  Filter [F:YATR]
-
-  Append YLOGTEXT, chr$(10)
-  Append YLOGTEXT, func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-"USER:"-YCURRENTUSER
-
-Return
-
-##################################################################################################
-#**
-#* Sub per Gestione Log a fine Azione-Campo: (Mobile): stampa YFields_end.txt, stampa YResponse_end.json
-#*!
-
-$YAX3MOB_ENDLOG
-
-  If(GWEBSERV)
-    #LOGGING(STAMPE): print end matrix: YFIELDS_end + print YRESPONSE
-    If(CURRENTROW = -1)
-      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "end", YFIELDS, YACTION, YCURRENTUSER) From YAX3MUTILS
-      Call YPRINT_DIR_CLB(YLOGDIRNAME, YRESPONSE, "YRESPONSE_" + YACTION +"_("+YCURRENTUSER+")", "json") From YUTILS
-    Else
-      Call YAX3MOB_PRINT_DIR_YFIELDS(YLOGDIRNAME, "end", YFIELDS, YACTION-"-row"+num$(CURRENTROW),YCURRENTUSER) From YAX3MUTILS
-      Call YPRINT_DIR_CLB(YLOGDIRNAME, YRESPONSE, "YRESPONSE_" + YACTION-"-row"+num$(CURRENTROW)+"_("+YCURRENTUSER+")", "json") From YUTILS
-    Endif
-  Endif
-
-  #Raz YLOGTEXT
-Return
-
-############################################################################################
-#**
-#* Metodo per Loggare un testo
-#*
-#* @param YMKSTAT Intero(booleano) per stato
-#* @param YMESSAGE Messaggio da loggare
-#*!
-
-Subprog YAX3MOB_ECRTRACE(YMKSTAT,YMESSAGE)
-
-  Value Integer YMKSTAT
-  Value Char YMESSAGE
-
-  Local Char YTYPELOG(10)
-#TODO:metti come parametro generale : "ArgoX3Mobile_Log"
-  Local Char YFILA(250) : YFILA = filpath("ArgoX3Mobile_Log","AX3M_Log_"+format$("D:YYYYMMDD",date$),"log")
-  Local Char YIDENT(30): YIDENT = num$(adxuid(1))
-  Local Clbfile YMESS
-
-  Case YMKSTAT
-    When 0 : YTYPELOG = "INFO"
-    When 1 : YTYPELOG = "WARN"
-    When 2 : YTYPELOG = "ERROR"
-    When 4 : YTYPELOG = "FATAL"
-    When Default
-  Endcase
-
-  YMESS = func YUTILS.YGET_TIMESTAMP()-"-"-YIDENT-"-"-YTYPELOG+":"-YMESSAGE
-  Call YWRITE_LOG(YMESS)
-End
-
-#########################################################################################
-#**
-#* Scrittura effettiva del Messaggio nel file di Log
-#*
-#* @param YMESSAGE Messaggio da tracciare
-#*!
-
-Subprog YWRITE_LOG(YMESSAGE)
-
-  Value Clbfile YMESSAGE
-  Local Char YFILA(250) : YFILA = filpath("ArgoX3Mobile_Log","AX3M_Log_"+format$("D:YYYYMMDD",date$),"log")
-
-  Openo YFILA Using [YF1]
-  Iomode adxifs ";" Using [YF1]
-  Iomode adxium GUTF8 Using [YF1]
-  Iomode adxirs chr$(13)+chr$(10) Using [YF1]
-  Wrseq YMESSAGE Using [YF1]
-  Openo Using [YF1]
-End
 
 ##################################################################################################################
 #                                                    UTILITà PER ANAGRAFICA X3
@@ -6415,6 +6319,67 @@ Funprog COUNT_MULTI(ARRAY)
   Next
 End COUNT
 
+##########################################################################
+#**
+#* Funzione per riconfiguare matrice associando in un unico blocco tutte le righe non vuote
+#*
+#* @param YFIELDS Matrice da riconfigurare
+#* @param YTMPFIELDS Matrice d'appoggio delle stesse dimensioni di quella da riconfigurare
+#*!
+
+Subprog YHANDLEMAT(YFIELDS,YTMPFIELDS)
+
+   Variable Char YFIELDS()(,)
+   Variable Char YTMPFIELDS()(,)
+   Local Integer YI,YK,YF: YF = -1
+
+  For YI = 0 To dim(YFIELDS,1)-1
+    #se incontro riga vuota
+    If(func YISEMPTYROW(YI, YFIELDS)= 0)
+      YF+=1
+      For YK = 0 To dim(YFIELDS,2) -1
+        YTMPFIELDS(YF,YK)= YFIELDS(YI,YK) #copia delle righe non vuote
+      Next
+    Endif
+  Next
+
+  #raz di yfields
+  For YI = 0 To dim (YFIELDS,1)-1
+    For YK = 0 To dim (YFIELDS,2)-1
+      Raz YFIELDS(YI,YK)
+    Next
+  Next
+
+  #copia
+  For YI = 0 To dim (YTMPFIELDS,1)-1
+    For YK = 0 To dim (YTMPFIELDS,2)-1
+      YFIELDS(YI,YK) = YTMPFIELDS(YI,YK)
+    Next
+  Next
+End
+
+######################################################
+#**
+#* Funzione che controlla se dato l'indice di una riga (YROW) di una matrice alfanumerica(YFIELDS) è vuota
+#*
+#* @param YROW Indice della riga da controllare
+#* @param YFIELDS Matrice con entries alfanumerici
+#*!
+
+Funprog YISEMPTYROW(YROW, YFIELDS)
+
+  Value Integer YROW
+  Value Char YFIELDS()(,)
+  Local Integer YI, YISEMPTY:YISEMPTY =1
+
+  For YI = 0 To dim(YFIELDS,2) -1
+    If(vireblc(YFIELDS(YROW,YI),2) <> AVOID.ACHAR)
+      YISEMPTY = 0 #non vuota
+      Break
+    Endif
+  Next
+End YISEMPTY
+
 ########################################################
 # v12 adxuid(1)
 Funprog GET_BDDID()
@@ -6656,34 +6621,6 @@ Subprog YPRINT_CLB(YCLBFILE, YFILENAME, YEXTENSION)
 End
 
 ######################################################
-#**
-#* Stampa di un Clob in un file data la Crt ambiente, il Nome e l'estensione
-#*
-#* @param YLOGDIR Nome Cartella ambiente in cui creare il file
-#* @param YCLBFILE Clob da scrivere in un file
-#* @param YFILENAME Nome del file su cui scrivere il clob
-#* @param YEXTENSION Estensione del file su cui scrivere il clob
-#*!
-
-Subprog YPRINT_DIR_CLB(YLOGDIR, YCLBFILE, YFILENAME, YEXTENSION)
-
-  Value Char YLOGDIR
-  Value Clbfile YCLBFILE
-  Value Char YFILENAME
-  Value Char YEXTENSION
-
-  Local Char YNOW(50) : YNOW = func YFORMATDATE(num$(datetime$),"DT")
-  Local Char YFILA(250) : YFILA=filpath(YLOGDIR, YFILENAME + "_" + YNOW, YEXTENSION)
-  Openo YFILA Using [YF1]
-  Iomode adxifs ";" Using [YF1]
-  Iomode adxium GUTF8 Using [YF1]
-  Iomode adxirs chr$(13)+chr$(10) Using [YF1]
-  Wrseq YCLBFILE Using [YF1]
-  Openo Using [YF1]
-
-End
-
-######################################################
 
 Subprog YPRINT_TEXT(YTEXT, YFILENAME, YEXTENSION)
 
@@ -6698,6 +6635,34 @@ Subprog YPRINT_TEXT(YTEXT, YFILENAME, YEXTENSION)
   Iomode adxium GUTF8 Using [YF1]
   Iomode adxirs chr$(13)+chr$(10) Using [YF1]
   Wrseq YTEXT Using [YF1]
+  Openo Using [YF1]
+
+End
+
+######################################################
+#**
+#* Stampa di un Clob in un file data la Crt ambiente, il Nome e l'estensione
+#*
+#* @param YDIR Nome Cartella ambiente in cui creare il file
+#* @param YCLBFILE Clob da scrivere in un file
+#* @param YFILENAME Nome del file su cui scrivere il clob
+#* @param YEXTENSION Estensione del file su cui scrivere il clob
+#*!
+
+Subprog YPRINT_DIR_CLB(YDIR, YCLBFILE, YFILENAME, YEXTENSION)
+
+  Value Char YDIR
+  Value Clbfile YCLBFILE
+  Value Char YFILENAME
+  Value Char YEXTENSION
+
+  Local Char YNOW(50) : YNOW = func YFORMATDATE(num$(datetime$),"DT")
+  Local Char YFILA(250) : YFILA=filpath(YDIR, YFILENAME + "_" + YNOW, YEXTENSION)
+  Openo YFILA Using [YF1]
+  Iomode adxifs ";" Using [YF1]
+  Iomode adxium GUTF8 Using [YF1]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF1]
+  Wrseq YCLBFILE Using [YF1]
   Openo Using [YF1]
 
 End

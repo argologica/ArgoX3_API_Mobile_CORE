@@ -1,0 +1,543 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#MC 11/01/2024: Test calcolo Giacenza
+
+$ACTION
+
+#If GUSER='ADMIN' : Infbox(ACTION) : Endif
+
+  Case ACTION
+    When "DEBUT"         : Gosub DEBUT
+    When "BOUTON"        : Gosub BOUTON
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+
+Return
+
+###############################################
+
+$DEBUT
+
+  Call OUVRE_TRACE ("YAPP - Log Gestione Calcolo giacenza Test - " - num$(date$)) From LECFIC
+  Call ECR_TRACE("# -- Gestione Calcolo giacenza Test --- ",0) From GESECRAN
+  Raz [M:YGIAC1]VALDCB
+  Affzo [M:YGIAC1]
+
+Return
+
+###############################################
+$BOUTON
+
+  Call ECR_TRACE("# -- SubRoutine BOUTON --- ",0) From GESECRAN
+  Call ECR_TRACE("# -- Impostazione parametri : ",0) From GESECRAN
+
+  #Inizio impostazione eventuali parametri delle subprog utilizzate nei buttons
+  Local Char YITMREF(250)
+  Local Char YSTOFCY(250)
+  Local Char YLOC(250)
+
+  Local Decimal YGIACENZA
+  Local Clbfile YRESPONSE
+  #Local Char YMESSAGE(250)
+
+  YITMREF = [M:YGIAC1]ITMREF
+  YSTOFCY = [M:YGIAC1]STOFCY
+  YLOC = [M:YGIAC1]LOC
+  Raz [M:YGIAC1]VALDCB
+
+  Call ECR_TRACE("# -- YITMREF = " - [M:YGIAC1]ITMREF,0) From GESECRAN
+  Call ECR_TRACE("# -- YSTOFCY = " - [M:YGIAC1]STOFCY,0) From GESECRAN
+  Call ECR_TRACE("# -- YLOC = " - [M:YGIAC1]STOFCY,0) From GESECRAN
+
+  #Fine impostazione parametri
+
+  Case BOUT
+    When "G"   #Calcolo Giacenza
+
+      Call ECR_TRACE("# -- Bouton = G : Calcolo Giacenza --- ",0) From GESECRAN
+
+      #GYDECIMAL: var globale per gestire decimali
+      Call YTCALCGIAC(YITMREF,YSTOFCY,YLOC,YRESPONSE)
+      #Call YCALCGIAC(YITMREF,YSTOFCY,YLOC,GYDECIMAL,YRESPONSE)
+      #[M:YGIAC1]VALDCB = GYDECIMAL
+
+      Call ECR_TRACE("# -- Giacenza =" - num$(YGIACENZA),0) From GESECRAN
+      Affzo [M:YGIAC1]VALDCB
+
+    When Default
+  Endcase
+
+Return
+
+###########################################################
+$FIN
+
+  Effzo [M:YGIAC1]
+  Call FERME_TRACE From LECFIC
+  Call LEC_TRACE From LECFIC
+
+Return
+
+
+#####################################################################################################
+######################################## Subprog/FunProg ############################################
+#####################################################################################################
+
+# Calcolo Giacenza
+Subprog YTCALCGIAC(ITMREF,STOFCY,LOC,YRESPONSE)
+#Subprog YCALCGIAC(ITMREF,STOFCY,LOC,VALDCB,YRESPONSE)
+
+    #parametri passati per valore
+    Value Char ITMREF
+    Value Char STOFCY
+    Value Char LOC
+
+    #parametri passati per riferimento
+    Variable Clbfile YRESPONSE
+
+    #variabili locali
+    Local Char YALERT_WS(50)(1..3,1..3)
+    Local Char YFIELDS(250)(4,8)
+    Local Char YHEADER(0)(1,1)
+    Local Char YDATA(0)(1,1)
+    Local Char YMESSAGE(250):YMESSAGE=AVOID.ACHAR
+    Local Integer YSUCCESS: [L]YSUCCESS=0
+    Local Char YITMREF(20): YITMREF = ITMREF
+    Local Char YSTOFCY(5): YSTOFCY = STOFCY
+    Local Char YLOC(3): YLOC = LOC
+    Local Decimal YVALDCB:YVALDCB=0
+
+    Local File STOCK [F:YSTO]
+    Local File STOLOC [F:YSTC]
+
+    Link [F:YSTO] With [F:YSTC]STC0=[F:YSTO]STOFCY;[F:YSTO]LOC
+&                 As [YLNK]
+    Filter [YLNK] Where ([F:YSTO]STOFCY = YSTOFCY & [F:YSTO]ITMREF = YITMREF & [F:YSTC]LOC = YLOC)
+
+    #Controllo che record set non vuoto
+    If rowcount([YLNK])= 0
+      YSUCCESS=1
+      YMESSAGE = "Nessun record trovato con Codice Articolo = "-YITMREF - ",Sito = "-YSTOFCY-", Ubicazione = "-YLOC
+
+      If ![V]GWEBSERV
+        Call ERREURT(YMESSAGE,1) From GESECRAN
+        Call ECR_TRACE(YMESSAGE,0) From GESECRAN
+      Endif
+    Endif
+
+    #Se record set non vuoto, ha senso calcolo della giacenza
+    If(YSUCCESS=0)
+
+       Columns [YLNK]([F:YSTO]QTYSTU,[F:YSTO]CUMALLQTA,[F:YSTO]CUMWIPQTY)
+
+       For [YLNK]
+          YVALDCB += [F:YSTO]QTYSTU - [F:YSTO]CUMALLQTA -[F:YSTO]CUMWIPQTY
+       Next
+
+       If ![V]GWEBSERV
+          Call ECR_TRACE("# -- YCALCGIAC ; VALDCB = "- num$(YVALDCB) ,0) From GESECRAN
+       Endif
+    Endif
+
+    Filter [YLNK]
+
+    If ![V]GWEBSERV
+       [M:YGIAC1]VALDCB= YVALDCB
+    Endif
+
+    #Valorizzo YRESPONSE
+    Call SET_FIELDS(YFIELDS,"STOFCY","Char",STOFCY,"0",AVOID.ACHAR,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"LOC","Char",LOC,"0",AVOID.ACHAR,"1","0","0",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",ITMREF,"0",AVOID.ACHAR,"1","0","0",2) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",num$(YVALDCB),"0",AVOID.ACHAR,"1","0","0",3) From YAX3MJSONGEN
+
+    If(YSUCCESS=0)
+      YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,"toast","Giacenza corretta",YALERT_WS,YFIELDS,YHEADER,YDATA)
+    Else
+      YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,"error",YMESSAGE,YALERT_WS,YFIELDS,YHEADER,YDATA)
+    Endif
+
+End
+
+######################################################################################
+######################################################################################
+
+# Controllo che la stringa sia regolare (no caratteri speciali al suo interno)
+# Se non trovati restituisce : 0
+# Altrimenti : 1
+
+Funprog YREGSTRINGCHECK(YSTRINGTOCHECK)
+
+  Value Char YSTRINGTOCHECK
+
+  # intero usato anche per condizione per ciclo while
+  Local Integer YRES: YRES = 0
+  Local Char YCHARSVIETATI(50): [L]YCHARSVIETATI = "!£$%&/()=?^[]+:;,#@§*\|<>'_°"
+  Local Integer YSTRINGLEN: [L]YSTRINGLEN = len(YCHARSVIETATI)
+  Local Integer YINDEX : YINDEX =1
+  Local Char YSELCHAR(1)
+
+  If(YSTRINGTOCHECK <>"")
+    While (YRES=0 & YINDEX <= YSTRINGLEN)
+
+      YSELCHAR = xgetchar(YCHARSVIETATI,YINDEX)
+      If (instr(0,YSTRINGTOCHECK,YSELCHAR) <> 0)
+        YRES=1
+      Endif
+
+      YINDEX +=1
+    Wend
+  Endif
+
+End YRES
+
+###################################### AZIONI - CAMPO ###################################################
+
+#####################################[ C - CONTROLLO ]###################################################
+
+# Azione-Campo : Controllo obbligatorietà e REGEX :STOFCY
+
+Subprog C_STOFCY(STOFCY,YRESPONSE)
+
+  Value Char STOFCY
+  Variable Clbfile YRESPONSE
+
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YFIELDS(250)(4,8)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+  Local Char YMESSAGE(250):YMESSAGE= AVOID.ACHAR
+  Local Integer YSUCCESS
+
+  If vireblc(STOFCY, 2) = AVOID.ACHAR
+    YSUCCESS = 1
+    YMESSAGE = "Codice Sito obbligatorio!"
+    Call ECR_TRACE(YMESSAGE, 0) From GESECRAN
+    If ![V]GWEBSERV
+      Call ERREURT(YMESSAGE, 1) From GESECRAN
+      mkstat=2
+    Endif
+  Elsif func YREGSTRINGCHECK(STOFCY) > 0
+    YSUCCESS = 1
+    YMESSAGE = "Attenzione! Codice Sito con caratteri non ammessi!"
+    If ![V]GWEBSERV
+      Call ERREURT(YMESSAGE, 1) From GESECRAN
+      mkstat=2
+    Endif
+  Else
+    YSUCCESS = 0
+  Endif
+
+  #Valorizzo YRESPONSE
+  If(YSUCCESS=0)
+    Call SET_FIELDS(YFIELDS,"STOFCY","Char",STOFCY,"0",YMESSAGE,"1","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"LOC","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"0","0","0",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",3) From YAX3MJSONGEN
+  Else
+    Call SET_FIELDS(YFIELDS,"STOFCY","Char",AVOID.ACHAR,"1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"LOC","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",3) From YAX3MJSONGEN
+  Endif
+
+  YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+
+End
+
+# Azione-Campo : Controllo obbligatorietà e REGEX :LOC--------------------------------------------------------------
+
+Subprog C_LOC(LOC,YRESPONSE)
+
+  Value Char LOC
+  Variable Clbfile YRESPONSE
+
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YFIELDS(250)(3,8)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+  Local Char YMESSAGE(250):YMESSAGE=AVOID.ACHAR
+  Local Integer YSUCCESS
+
+  If vireblc(LOC, 2) = AVOID.ACHAR
+    YSUCCESS = 1
+    YMESSAGE = "Codice Ubicazione obbligatorio!"
+    Call ECR_TRACE(YMESSAGE, 0) From GESECRAN
+    If ![V]GWEBSERV
+      Call ERREURT(YMESSAGE, 1) From GESECRAN
+      mkstat=2
+    Endif
+  Elsif func YREGSTRINGCHECK(LOC) > 0
+    YSUCCESS = 1
+    YMESSAGE = "Attenzione! Codice Ubicazione con caratteri non ammessi!"
+    If ![V]GWEBSERV
+      Call ERREURT(YMESSAGE, 1) From GESECRAN
+      mkstat=2
+    Endif
+  Else
+    YSUCCESS = 0
+  Endif
+
+  #Valorizzo YRESPONSE
+  If(YSUCCESS=0)
+    Call SET_FIELDS(YFIELDS,"LOC","Char",LOC,"0",YMESSAGE,"1","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+  Else
+    Call SET_FIELDS(YFIELDS,"LOC","Char",AVOID.ACHAR,"1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+  Endif
+
+  YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+
+End
+
+# Azione-Campo : Controllo obbligatorietà e REGEX :ITMREF-------------------------------------------------------------------
+
+Subprog C_ITMREF(ITMREF, YRESPONSE)
+
+  Value Char ITMREF
+  Variable Clbfile YRESPONSE
+
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YFIELDS(250)(2,8)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+  Local Char YMESSAGE(250):YMESSAGE = AVOID.ACHAR
+  Local Integer YSUCCESS
+
+  If vireblc(ITMREF, 2) = AVOID.ACHAR
+    YSUCCESS = 1
+    YMESSAGE = "Codice articolo obbligatorio!"
+    Call ECR_TRACE(YMESSAGE, 0) From GESECRAN
+    If ![V]GWEBSERV
+      Call ERREURT(YMESSAGE, 1) From GESECRAN
+      mkstat=2
+    Endif
+  Elsif func YREGSTRINGCHECK(ITMREF) > 0
+    YSUCCESS = 1
+    YMESSAGE = "Attenzione! Codice articolo con caratteri non ammessi!"
+    If ![V]GWEBSERV
+      Call ERREURT(YMESSAGE, 1) From GESECRAN
+      mkstat=2
+    Endif
+  Else
+    YSUCCESS = 0
+  Endif
+
+  #Valorizzo YRESPONSE
+  If(YSUCCESS=0)
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",ITMREF,"0",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+  Else
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+  Endif
+
+  YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+
+End
+
+#####################################[ AM - POST MODIFICA ]###################################################
+
+# AZIONE-CAMPO: AM-Post Modifica Sito esistente in DB --------------------------------------------------------
+
+Subprog AM_STOFCY(STOFCY,YRESPONSE)
+
+  Value Char STOFCY
+  Variable Clbfile YRESPONSE
+
+  Local File STOCK [F:YSTO]
+
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YFIELDS(250)(5,8)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+  Local Char YMESSAGE(250):YMESSAGE=AVOID.ACHAR
+  Local Integer YSUCCESS: [L]YSUCCESS=0
+  Local Char YSTOFCY(250) : YSTOFCY= STOFCY
+  Local Char YIPTDAT(20): YIPTDAT = format$("D:YYYY[-]MM[-]DD[T]hh[:]mm[:]ss[Z]", datetime$)
+
+  # Controllo che Sito esista
+  Filter [F:YSTO] Where [F:YSTO]STOFCY = YSTOFCY
+
+  #Controllo che record set non vuoto
+  If rowcount([F:YSTO])= 0
+    YSUCCESS=1
+    YMESSAGE = "Nessun record trovato con Sito = "- YSTOFCY
+    Call ECR_TRACE(YMESSAGE,0) From GESECRAN
+
+    If ![V]GWEBSERV
+      Call ERREURT(YMESSAGE,1) From GESECRAN
+      mkstat =2
+      # Disabilito successivi campi di maschera
+      Diszo [M:YGIAC1]LOC
+      Diszo [M:YGIAC1]ITMREF
+    Endif
+  Else
+    If ![V]GWEBSERV
+      # Abilito successivi campi di maschera
+      Actzo [M:YGIAC1]LOC
+      Actzo [M:YGIAC1]ITMREF
+    Endif
+  Endif
+
+  Filter [F:YSTO]
+
+  #Valorizzo YRESPONSE
+  If(YSUCCESS=0)
+    Call SET_FIELDS(YFIELDS,"STOFCY","Char",YSTOFCY,"0",YMESSAGE,"1","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"LOC","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"0","0","0",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",3) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"IPTDAT","Date",YIPTDAT,"0",AVOID.ACHAR,"1","0","1",4) From YAX3MJSONGEN
+  Else
+    Call SET_FIELDS(YFIELDS,"STOFCY","Char",AVOID.ACHAR,"1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"LOC","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",3) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"IPTDAT","Date",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",4) From YAX3MJSONGEN
+  Endif
+
+  YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+
+End
+
+# AZIONE-CAMPO: AM-Post Modifica LOC esistente in DB-------------------------------------------
+
+Subprog AM_LOC(LOC, YRESPONSE)
+
+  Value Char LOC
+  Variable Clbfile YRESPONSE
+
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YFIELDS(250)(3,8)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+  Local File STOLOC [F:YSTC]
+  Local Char YLOC(10): YLOC = LOC
+  Local Char YMESSAGE(250):YMESSAGE = AVOID.ACHAR
+  Local Shortint YSUCCESS : YSUCCESS = 0
+
+  Filter [F:YSTC] Where [F:YSTC]LOC = YLOC
+  #Controllo che il recordset non sia vuoto
+  If rowcount([F:YSTC])= 0
+    YSUCCESS = 1
+    YMESSAGE = "Nessun record trovato con Ubicazione = " + YLOC
+    Call ECR_TRACE(YMESSAGE,0) From GESECRAN
+    If ![V]GWEBSERV
+      Call ERREURT(YMESSAGE,1) From GESECRAN
+      mkstat=2
+    Endif
+  Endif
+  Filter [F:YSTC]
+
+  #Valorizzo YRESPONSE
+  If(YSUCCESS=0)
+    Call SET_FIELDS(YFIELDS,"LOC","Char",YLOC,"0",YMESSAGE,"1","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+  Else
+    Call SET_FIELDS(YFIELDS,"LOC","Char",AVOID.ACHAR,"1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",2) From YAX3MJSONGEN
+  Endif
+
+  YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+
+End
+
+# AZIONE-CAMPO: AM-Post Modifica itmref esistente in DB---------------------------------
+
+Subprog AM_ITMREF(ITMREF,YRESPONSE)
+
+  Value Char ITMREF
+  Variable Clbfile YRESPONSE
+
+  Local File STOCK [F:YSTO]
+
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YFIELDS(250)(2,8)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+  Local Char YMESSAGE(250):YMESSAGE =AVOID.ACHAR
+  Local Integer YSUCCESS: [L]YSUCCESS=0
+  Local Char YITMREF(20): YITMREF = ITMREF
+
+  # Controllo che Cod.Articolo esista
+  Filter [F:YSTO] Where [F:YSTO]ITMREF = YITMREF
+
+  #Controllo che record set non vuoto
+  If rowcount([F:YSTO])= 0
+    YSUCCESS=1
+    YMESSAGE = "Nessun record trovato con Cod.Articolo = "- YITMREF
+    Call ECR_TRACE(YMESSAGE,0) From GESECRAN
+
+    If ![V]GWEBSERV
+      mkstat =2
+      Call ERREURT(YMESSAGE,1) From GESECRAN
+    Endif
+  Endif
+
+  Filter [F:YSTO]
+
+  #Valorizzo YRESPONSE
+  If(YSUCCESS=0)
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",YITMREF,"0",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+  Else
+    Call SET_FIELDS(YFIELDS,"ITMREF","Char",AVOID.ACHAR,"1",YMESSAGE,"0","0","0",0) From YAX3MJSONGEN
+    Call SET_FIELDS(YFIELDS,"VALDCB","Decimal",AVOID.ACHAR,"0",AVOID.ACHAR,"1","0","1",1) From YAX3MJSONGEN
+  Endif
+
+  YRESPONSE =func YAX3MJSONGEN.GENERATE_JSON(YSUCCESS,AVOID.ACHAR,AVOID.ACHAR,YALERT_WS,YFIELDS,YHEADER,YDATA)
+End
+
+# AZIONE-CAMPO: AS-Pre Inserimento : AS_ITMREF: controllo Loc ESISTENTE in DB ---------------------------------------------------------------------
+
+Subprog AS_ITMREF(YITMREF,YRES,YMESS)
+  Value Char YITMREF
+  Variable Integer YRES
+  Variable Char YMESS
+
+  #Local Char YLOC(3):YLOC = YSTOFCYGET
+
+  Local File STOCK [F:YSTO]
+  Local File STOLOC [F:YSTC]
+
+  Local Char YVAL (20)
+
+  If ![V]GWEBSERV
+      YVAL =[M:YGIAC1]LOC
+  Else
+      YVAL =YITMREF
+  Endif
+
+  YRES=0
+  YMESS=""
+
+  # Controllo che Loc esista
+  #Filter [F:YSTC] Where [F:YSTC]LOC = [M:YGIAC1]LOC
+  Filter [F:YSTC] Where [F:YSTC]LOC = YVAL
+
+  #Controllo che record set non vuoto
+  If rowcount([F:YSTC])= 0
+
+    YMESS = "Nessun record trovato con LOC = "- YVAL
+    #YMESS = "Nessun record trovato con lOC = "- YITMREF
+    Call ECR_TRACE(YMESS,0) From GESECRAN
+
+    If ![V]GWEBSERV
+      Call ERREURT(YMESS,1) From GESECRAN
+    Endif
+
+    mkstat =2
+    YRES= mkstat
+
+
+  Endif
+  Filter [F:YSTC]
+
+
+End

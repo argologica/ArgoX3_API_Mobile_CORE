@@ -1,0 +1,76 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+# Gestione Selezione VACBPR per Funzione ###################################################################################
+
+#YBPC
+$VAC_BPC
+
+  Gosub SET_LINK_YBPC
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_YBPC_FIELDS
+  Endif
+#Infbox "3 -RWCNT ="-num$(rowcount([LNK]))
+
+  Gosub SET_CRITERE_YBPC
+  Gosub SET_TITCOL_YBPC
+Return
+
+#########################################################################################à
+$SET_LINK_YBPC
+
+Return
+
+#####################################################################################
+$INIT_CRITERE_YBPC_FIELDS
+
+Return
+
+#######################################################################################
+
+$SET_CRITERE_YBPC
+
+  NUM_COLS = 1
+
+  If IS_MOBILE = 2
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE)
+    COUNT_VALUES = rowcount([LNK])
+    FIELDS(0) = "VACBPR" #: FIELDS(1) = "BPCNAM"
+    NBCOL = 0
+  Else
+    GSELFAC = 1
+    TIT(0) = "Selezione Regime IVA"
+    ORDRE = "[F:LNK]VACBPR"
+    START = "[F:LNK]VACBPR"
+    DEFPAG = 1
+    NBCOL = 1
+
+    Local Char CRITERE(250)
+    CRITERE = "1=1 & "-"[F:LNK]LEG = '" + PARAMS(0) + "'"
+    If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+      Local Char YVACBPR(5): YVACBPR = vireblc(PARAMS(1),2)
+      CRITERE-= "& instr(1, tolower([F:LNK]VACBPR), tolower('" + YVACBPR + "'))<>0"
+    Endif
+  Endif
+Return
+
+################################################################################à
+
+$SET_TITCOL_YBPC
+
+  Default File [LNK]
+
+  #Imposto Colonne Lookup
+  Call TEXTFIC("TABVACBPR","VACBPR",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:LNK]VACBPR"
+#  NBCOL += 1 : Call TEXTFIC("BPCUSTOMER","BPCNAM",2,TIT(NBCOL)) From OBJDIV
+#  COL(NBCOL) = "[F:YBPC]BPCNAM"
+
+Return

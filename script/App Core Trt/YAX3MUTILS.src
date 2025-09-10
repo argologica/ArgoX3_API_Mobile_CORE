@@ -1,0 +1,2374 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###############################################################################################
+#
+#LIBRERIA PER NUOVA GESTIONE MOBILE - Nuovo protocollo per AX3M
+#
+################################################################################################
+
+#**
+#* Inizializzazione variabili (X3/AX3M), matrici (lato AX3M) per ogni azione campo:
+#* [X3]: iniz. YFIELDS(,)(solo param formale),
+#* [AX3M]: iniz YALERT_WS(,);YHEADER(,); YDATA(,) ; YALERT_TYPE; YALERT_MESSAGE;
+#* YMAXFLDCOUNT (max numero di fields per funzione);YFIELDS(,)& loro riempimento
+#*!
+
+$YAX3MOB_INIT_ACTIONFIELD
+
+  Local Integer CURRENTROW : CURRENTROW = -1
+  Local Char YMESSAGE(250)
+  Local Char YALERT_MESSAGE(250): YALERT_MESSAGE = AVOID.ACHAR
+  Local Char YALERT_TYPE(20): YALERT_TYPE = AVOID.ACHAR
+  Local Char YFUNC_TYPE(10)
+
+  # variabili utilizzate in modalità consultazione
+  Local Char YMSKALIAS(10)
+  Local Integer COUNT_VALUES: COUNT_VALUES = 0 #N°dati recordSet estrapolato
+  Local Integer NUM_COLS #grid
+  Local Char CRITERE(250)(10)
+  Local Char PARAMS(250)(5)
+  Local Char QUERY(250)
+
+  #CurrentUser
+  Local Char YCURRENTUSER(20)
+
+  If(![V]GWEBSERV) #X3
+    Local Char YFIELDS(1)(1,1)    #solo placeholder lato X3
+    #mi serve da settare per le azioni di campi di testata in videata che hanno un riquadrO, se non setto nolign = 1 X3 crasha
+    #perchè i W chiamano i params di riquadro CON nolign-1, es. Call C_GIACYCOD([M:YCGC1]FCY,VALEUR,[M:YCGC1]LOC,[M:YCGC1]ITMREF(nolign-1)...
+    YCURRENTUSER = GUSER
+    CURRENTROW = nolign - 1
+  Else  #AX3M
+
+    Local Char YALERT_WS(50)(1..3,1..3)
+    Local Char YHEADER(0)(1,1)
+    Local Char YDATA(0)(1,1)
+    Local Char YSELECTEDFIELDS(0)(1) #Array per Selez Multi Campo,solo inizializzato
+    Const Integer YMAXFLDCOUNT: YMAXFLDCOUNT = 300
+
+    #Modalità MODIFICA
+    Local Integer YMODIF : YMODIF = 0 #FALSE
+    Local Integer YMODIF_RIQUADRO_COUNT
+
+    #Apertura altra FUNZIONE
+    Local Char YOPENFUNCTION(250)(4)
+
+    #Gestione CAMPI
+    Local Char YFIELDS(250)(YMAXFLDCOUNT,10)        #aggiunta nuova Col(qui indicato se campo di T o D) #Local Char YFIELDS(250)(YFIELDCOUNT,8)
+    Local Char YSCREENFIELDS(250)(YMAXFLDCOUNT,3)  #(idx=0: cod campo, idx=1:cod msk di appartenenza, idx= valore(char))
+
+    #Deserializzazione YAX3MRESP
+    Call YJSON2ARRAY(YAX3MRESP, YCURRENTUSER, YFIELDS) From YJSONDESERIALIZE
+
+    #Popolamento da anagrafica: Matrice in INIT
+    Call YINIT_SCREENFLDS(YFIELDS, YWINNAME)
+
+    #Riga corrente nel caso di esistenza di un riquadro
+    CURRENTROW = func YAX3MUTILS.FIND_CURRENTROW(YFIELDS)
+  Endif
+
+  #LOG
+  Gosub YAX3MOB_INIT From YAX3MLOG
+
+Return
+
+#########################################################################################################
+#**
+#* Sub per Inizializzazione per Azioni Bottoni di Finestra
+#*!
+
+$YAX3MOB_INIT_BUTTONACTION
+
+  Local Clbfile YCSVTEXT(2)
+  Local Char YMEX_DOCTYPE(50), YFUNC_TYPE(10)
+  Local Char YDESCR(20) : YDESCR = YMEX_DOCTYPE - "AX3M"
+  Local Char YIMP_CODE(10)
+  Local Integer YISBOUT: YISBOUT =0
+
+  Gosub YAX3MOB_INIT_ACTIONFIELD
+Return
+
+######################################
+#DEPRECATO!!
+
+$YAX3MOB_INIT_BUTTACTION
+
+  #parametrizzazioni
+  #generali
+  Local Char YMESSAGE(250):YMESSAGE = AVOID.ACHAR
+  Local Integer YSUCCESS: YSUCCESS=0      #(=0:TRUE, >0:FALSE)
+  Local Integer YALERT_TYPEINT : YALERT_TYPEINT =-1
+  Local Char YFUNC_NAME(10)  #Nome Funzione
+  Local Char YFUNC_TYPE(10)  #("DOC","CONS","MOD")(Tipo Azione Bottone)
+
+  #doc
+  Local Char YIMP_CODE(10)    #Nome (eventuale)Mod di Import, ALTRIMENTI vuoto
+  Local Char YMEX_DOCTYPE(50) #Intestazione(eventuale) messaggio
+  Local Integer YSTATUS
+  Local Clbfile YCSVTEXT(2)   #clob per contenuto csv per Mod Import
+
+  #cons
+  Local Char YMSKALIAS(10)
+  Local Integer COUNT_VALUES: COUNT_VALUES = 0 #N°dati recordSet estrapolato
+  Local Integer NUM_COLS #grid
+  Local Char CRITERE(250)(10)
+  Local Char PARAMS(250)(5)
+  Local Char QUERY(250)
+
+Return
+
+########################################################################################################
+#**
+#* Metodo per inizializzazione matrice YFIELDS  da anagrafica
+#*
+#* @param YFIELDS
+#* @param YWINNAME
+#*!
+
+Subprog YINIT_SCREENFLDS(YFIELDS,YWINNAME)
+
+  Variable Char YFIELDS()(,)
+  Value Char YWINNAME
+
+  Local File AWINDOW [YAWI]
+  Local File AMSK [YAMK]
+  Local File AMSKZON [YAMZ]
+  Local File ATYPE [YATY]
+
+  Local Integer YF,YI,YJ,INDEX,YDETTBLKCOUNT #num blocchi di tipo RIQ in una data maschera
+  Local Char YMSKNAME(15),YPARBLKNAME(15)
+  Local Integer YDETTBLKIDX:YDETTBLKIDX=-1
+
+#-------------
+  Local Integer YFHFLDIDX: YFHFLDIDX =-1 #qui registro idx 1°campo di testata
+  Local Char YFHFLDCODE(10)   #qui registro code 1°campo di testata
+
+  #--yfields-params-----------------------------#
+  Const Integer YCOL_NAME : YCOL_NAME = 0
+  Const Integer YCOL_TYPE : YCOL_TYPE = 1
+  Const Integer YCOL_VALUE : YCOL_VALUE = 2
+  Const Integer YCOL_VALID : YCOL_VALID = 3
+  Const Integer YCOL_MEX : YCOL_MEX = 4
+  Const Integer YCOL_FOCUS : YCOL_FOCUS = 5
+  Const Integer YCOL_VIS : YCOL_VIS = 6
+  Const Integer YCOL_ENA : YCOL_ENA = 7
+  Const Integer YCOL_DETT : YCOL_DETT = 8   #colonna che accoglie "0" o "1" (se campo di dett)
+  Const Integer YCOL_ROW : YCOL_ROW = 9     #colonna che accoglie "0" o "1" (se riga corrente)
+
+  Read [F:YAWI]AWI0=YWINNAME
+  Columns [F:YAWI](NOMMSK,NBMSK,MSKENT)    #NOMMSK: array con codici masks della finestra
+
+  If(fstat=0)
+
+    #VID TESTATA
+    If([F:YAWI]MSKENT<>AVOID.ACHAR)
+       YMSKNAME = [F:YAWI]MSKENT
+
+       #estraggo blocchi della videata
+       Read [F:YAMK]CODMSK=YMSKNAME
+       Columns [F:YAMK](TYPBLOC,NBBLOC,NBLIGT,BASPAG)
+       If(fstat=0)
+         Gosub GET_MSKNBLIG_LIST  #lista nblig di mskent
+         Gosub GET_MSKFLDS        # popolata yfields , INDEX ++
+       Endif
+    Endif
+
+    #SCHEDE
+    For YI=0 To [F:YAWI]NBMSK -1  #ciclo su N° mask
+      YDETTBLKIDX =-1 #reset a -1, per ricerca eventuale nuovo indice Blocco Riquadro
+      YMSKNAME = [F:YAWI]NOMMSK(YI)
+      #estraggo blocchi
+      Read [F:YAMK]CODMSK=YMSKNAME
+      Columns [F:YAMK](TYPBLOC,NBBLOC,NBLIGT,BASPAG)
+
+      If(fstat=0)
+       Gosub GET_MSKNBLIG_LIST
+       Gosub GET_MSKFLDS
+      Endif
+    Next
+  Endif
+End
+
+#############################################################################################
+#**
+#* Sub per ricerca (nei blocchi) Parametri di Fondo Riquadro di una Videata
+#*!
+
+$GET_MSKNBLIG_LIST
+
+   #Local Char YBLKPARAMS(10)(1..[F:YAMK]NBBLOC)
+   Local Char YBLKPARAMS(10)([F:YAMK]NBBLOC)
+
+   #ciclo sui blocchi per trovare l'eventuale campo di tipo parametro
+   For YJ=0 To [F:YAMK]NBBLOC-1
+     If([F:YAMK]TYPBLOC(YJ)=1)  #cerco blc di tipo Riquadro
+
+        YDETTBLKIDX = YJ
+        YBLKPARAMS(YJ) = [F:YAMK]BASPAG(YJ) # ci metto il param = campo fondo  riquadro(eg NBLIG)
+        Break
+     Endif
+   Next
+Return
+
+################################################################################################
+#**
+#* Estraggo i campi dei blocchi (Lista/Riquadro) di una maschera (ad esclusione degli NBLIG)
+#*!
+
+$GET_MSKFLDS
+
+ Local Integer YFLDOCCNUM   #N°occorrenze di un campo nella matrice YFIELDS
+ Local Integer YFLDOCC(50)  #Array delle occorrenze
+
+ #FILTRO su cod Msk e su campi con cod <> param blocco
+ Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKNAME & find([F:YAMZ]CODZON,YBLKPARAMS)=0) Order By [F:YAMZ]NUMLIG
+ Columns [F:YAMZ](CODMSK,CODZON,CODTYP,SAIAFF,NUMBLOC)
+
+ #ciclo sui campi della Videata in esame
+ For [F:YAMZ]
+  Local Integer YK
+  Call YINIT_INTARR(YFLDOCC,-1) From YUTILS
+  Call YFIND_OCCS(YFIELDS,[F:YAMZ]CODZON,YFLDOCC) From YUTILS #popolo matrice occorrenze con indici del cod campo [F:YAMZ]CODZON
+
+  #ciclo su indici Occorrenze del cod campo(= [F:YAMZ]CODZON) e setto il FldItem
+  For YK=0 To dim(YFLDOCC,1)-1
+    If(YFLDOCC(YK) =-1)
+      Break
+    Else
+      Call YSETFIELDITEM(YFIELDS,YFLDOCC(YK),[F:YAMZ]CODZON,[F:YAMZ]CODTYP,[F:YAMZ]SAIAFF,[F:YAMZ]NUMBLOC,YDETTBLKIDX)
+    Endif
+  Next
+ Next
+ Filter [F:YAMZ]
+
+Return
+
+####################################################################################################################
+#**
+#* Sub per parametri del FldItem (Oggetto-Campo):
+#* 0)Cod Campo; 1)Tipo dato campo; 2)Valore Campo; 3)Validità Campo; 4)Messaggio associato a Campo;
+#* 5)Focus campo; 6)Visibilità Campo; 7)Dis/abilitazione Campo; 8)Campo Dettaglio/Testata; 9)Riga Corrente
+#*!
+
+$YSET_FLDPARAMS
+
+  #--yfields-params---------------------------------------------------#
+  Const Integer YCOL_NAME : YCOL_NAME = 0
+  Const Integer YCOL_TYPE : YCOL_TYPE = 1
+  Const Integer YCOL_VALUE : YCOL_VALUE = 2
+  Const Integer YCOL_VALID : YCOL_VALID = 3
+  Const Integer YCOL_MEX : YCOL_MEX = 4
+  Const Integer YCOL_FOCUS : YCOL_FOCUS = 5
+  Const Integer YCOL_VIS : YCOL_VIS = 6
+  Const Integer YCOL_ENA : YCOL_ENA = 7
+  Const Integer YCOL_DETT : YCOL_DETT = 8   #colonna che accoglie "0" o "1" (se campo di dett)
+  Const Integer YCOL_ROW : YCOL_ROW = 9     #colonna che accoglie "0" o "1" (se riga corrente)
+
+Return
+
+####################################################################################################################
+#**
+#* Subprog per setting Oggetto-Campo nella matrice YFIELDS
+#*
+#* @param YFIELDS Matrice dei campi
+#* @param YFLDIDX Indice del campo nella matrice YFIELDS
+#* @param YCODZON Codice Campo
+#* @param YCODTYP Codice Tipo-dato del Campo
+#* @param YSAIAFF Codice per gardo visibilità/editabilità
+#* @param YNUMBLOC Numero del Blocco di appartenenza
+#* @param YDETTBLKIDX Indice dell'eventuale blocco di Riquadro presente
+#*!
+
+Subprog YSETFIELDITEM(YFIELDS,YFLDIDX,YCODZON,YCODTYP,YSAIAFF,YNUMBLOC,YDETTBLKIDX)
+
+  Variable Char YFIELDS()(,)
+  Value Char YCODZON
+  Value Char YCODTYP
+  Value Integer YSAIAFF
+  Value Integer YNUMBLOC
+  Value Integer YFLDIDX
+  Value Integer YDETTBLKIDX
+
+  Local File ATYPE [YATY]
+  Gosub YSET_FLDPARAMS
+
+  ## Cod- name
+  If(YFIELDS(YFLDIDX,YCOL_NAME)= AVOID.ACHAR)
+    YFIELDS(YFLDIDX,YCOL_NAME) = YCODZON
+  Endif
+
+  ## Valid
+  If(YFIELDS(YFLDIDX, YCOL_VALID)= AVOID.ACHAR)
+    YFIELDS(YFLDIDX, YCOL_VALID) = "1"  #tutti i campi validi all'inizio
+  Endif
+
+  ## Focus: solo il primo campo di maschera ha il focus all'init( alla 1° az campo)
+#  If(YFIELDS(YFLDIDX, YCOL_FOCUS)= AVOID.ACHAR & YFLDIDX = 0)
+#    YFIELDS(YFLDIDX, YCOL_FOCUS) = "1"
+#  Else
+#    YFIELDS(YFLDIDX, YCOL_FOCUS) = "0"
+#  Endif
+
+  ## Tipo Campo
+  Read [F:YATY]CODTYP = YCODTYP
+  #TYPTYP menu locale 30
+  If find([F:YATY]TYPTYP,1,2,3) <> 0
+    YFIELDS(YFLDIDX, YCOL_TYPE) = "integer"
+  Elsif find([F:YATY]TYPTYP,4,5,6)
+    YFIELDS(YFLDIDX, YCOL_TYPE) = "decimal"
+  Elsif find([F:YATY]TYPTYP,7,10)
+    YFIELDS(YFLDIDX, YCOL_TYPE) = "char"
+  Elsif [F:YATY]TYPTYP = 8
+    YFIELDS(YFLDIDX, YCOL_TYPE) = "date"
+  Endif
+
+  ##Visibilità
+  If (YSAIAFF <> 3 & YFIELDS(YFLDIDX, YCOL_VIS) = AVOID.ACHAR)#NASCOSTO
+    YFIELDS(YFLDIDX, YCOL_VIS) =  "1"
+  Else
+    If YFIELDS(YFLDIDX, YCOL_VIS) = AVOID.ACHAR
+      YFIELDS(YFLDIDX, YCOL_VIS) = "0"
+    Endif
+  Endif
+
+  #Editabilità
+  If(YSAIAFF = 1 & YFIELDS(YFLDIDX, YCOL_ENA) = AVOID.ACHAR) #INSERITO
+    YFIELDS(YFLDIDX, YCOL_ENA) = "1"
+  Else
+    If YFIELDS(YFLDIDX, YCOL_ENA) = AVOID.ACHAR
+      YFIELDS(YFLDIDX, YCOL_ENA) = "0"
+    Endif
+  Endif
+
+  ##Tipo Campo Test/Dett
+  If(YDETTBLKIDX=-1)
+    YFIELDS(YFLDIDX, YCOL_DETT)="0"
+  Else
+    YFIELDS(YFLDIDX, YCOL_DETT) = func YUTILS.STR_IIF(YNUMBLOC = YDETTBLKIDX+1, "1", "0")
+  Endif
+
+  ## Current ROW : correttivo nel caso di json con prima il dettaglio
+  If(YFIELDS(YFLDIDX, YCOL_DETT) = "0") #campi di testata non sono mai sulla riga corrente
+    YFIELDS(YFLDIDX, YCOL_ROW)="0"
+  Endif
+End
+
+####################################################################################################################
+#**
+#* Subroutine per setting variabili iniziali per Mobile (AX3M)
+#* (DEPRECATO)
+#*!
+
+$YSET_GLOBALVARS
+
+  Local Char YALERT_WS(50)(1..3,1..3)
+  Local Char YHEADER(0)(1,1)
+  Local Char YDATA(0)(1,1)
+  Local Char YALERT_TYPE(20): YALERT_TYPE = AVOID.ACHAR
+  Local Char YALERT_MESSAGE(250): YALERT_MESSAGE = AVOID.ACHAR
+  Local Integer YCOUNTWINFIELDS : YCOUNTWINFIELDS = func YCOUNT_WINFIELDS(YACTION)
+  Local Char YFIELDS(250)(YCOUNTWINFIELDS,10)        #aggiunta nuova Col(qui indicato se campo di T o D) #Local Char YFIELDS(250)(YFIELDCOUNT,8)
+
+Return
+
+#########################################################################################################
+#**
+#* Riempimento matrice da anagrafica
+#*
+#* @param YFIELDS Matrice dei campi
+#* @param YWINNAME Codice Finestra
+#*!
+
+#Subprog YINIT_SCREENFLDS(YFIELDS,YWINNAME)
+#
+#  Variable Char YFIELDS()(,)
+#  Value Char YWINNAME
+#
+#  Local File AWINDOW [YAWI]
+#  Local File AMSK [YAMK]
+#  Local File AMSKZON [YAMZ]
+#  Local File ATYPE [YATY]
+#
+#  Local Integer YF,YI,YJ,INDEX,YDETTBLKCOUNT #num blocchi di tipo RIQ in una data maschera
+#  Local Char YMSKNAME(15),YPARBLKNAME(15)
+#  Local Integer YDETTBLKIDX
+#
+#  #--yfields-params-----------------------------#
+#  Const Integer YCOL_NAME : YCOL_NAME = 0
+#  Const Integer YCOL_TYPE : YCOL_TYPE = 1
+#  Const Integer YCOL_VALUE : YCOL_VALUE = 2
+#  Const Integer YCOL_VALID : YCOL_VALID = 3
+#  Const Integer YCOL_MEX : YCOL_MEX = 4
+#  Const Integer YCOL_FOCUS : YCOL_FOCUS = 5
+#  Const Integer YCOL_VIS : YCOL_VIS = 6
+#  Const Integer YCOL_ENA : YCOL_ENA = 7
+#  Const Integer YCOL_DETT : YCOL_DETT = 8   #colonna che accoglie "0" o "1" (se campo di dett)
+#  Const Integer YCOL_ROW : YCOL_ROW = 9     #colonna che accoglie "0" o "1" (se riga corrente)
+#
+#  Read [F:YAWI]AWI0=YWINNAME
+#  Columns [F:YAWI](NOMMSK,NBMSK)    #NOMMSK: array con codici masks della finestra
+#
+#  If(fstat=0)
+#      For YI=0 To [F:YAWI]NBMSK -1  #ciclo su N° mask
+#
+#        INDEX =0
+#        YMSKNAME = [F:YAWI]NOMMSK(YI)
+#        Read [F:YAMK]CODMSK=YMSKNAME
+#        Columns [F:YAMK](TYPBLOC,NBBLOC,NBLIGT,BASPAG)
+#
+#        If(fstat=0)
+#           Local Char YBLKPARAMS(10)(1..[F:YAMK]NBBLOC)
+#           #ciclo sui blocchi per trovare l'eventuale campo di tipo parametro
+#           For YJ=0 To [F:YAMK]NBBLOC-1
+#             If([F:YAMK]TYPBLOC(YJ)=1)  #cerco blc di tipo Riquadro
+#                YDETTBLKIDX = YJ
+#                YBLKPARAMS(YJ) = [F:YAMK]BASPAG(YJ) # ci metto il param = campo fondo  riquadro(eg NBLIG)
+#                Break
+#             Endif
+#           Next
+#
+#           #FILTRO su cod Msk e su campi con cod <> param blocco
+#           Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKNAME & find([F:YAMZ]CODZON,YBLKPARAMS)=0) Order By [F:YAMZ]NUMLIG
+#           Columns [F:YAMZ](CODMSK,CODZON,CODTYP,SAIAFF,NUMBLOC)
+#
+#           For [F:YAMZ]
+#              #Cod
+#              If(YFIELDS(INDEX,YCOL_NAME)= AVOID.ACHAR)
+#                YFIELDS(INDEX,YCOL_NAME) = [F:YAMZ]CODZON
+#              Endif
+#              #Valid
+#              If(YFIELDS(INDEX, YCOL_VALID)= AVOID.ACHAR)
+#                YFIELDS(INDEX, YCOL_VALID) = "1" #"0"   #tutti i campi validi
+#              Endif
+#
+#              #Focus: solo il primo campo di maschera ha il focus all'init( alla 1° az campo)
+#              If(YFIELDS(INDEX, YCOL_FOCUS)= AVOID.ACHAR & INDEX = 0)
+#                YFIELDS(INDEX, YCOL_FOCUS) = "1" #"0"
+#              Else
+#                YFIELDS(INDEX, YCOL_FOCUS) = "0" #"1"
+#              Endif
+#
+#              #Tipo
+#              Read [F:YATY]CODTYP = [F:YAMZ]CODTYP
+#              #TYPTYP menu locale 30
+#              If find([F:YATY]TYPTYP,1,2,3) <> 0
+#                YFIELDS(INDEX, YCOL_TYPE) = "integer"
+#              Elsif find([F:YATY]TYPTYP,4,5,6)
+#                YFIELDS(INDEX, YCOL_TYPE) = "decimal"
+#              Elsif find([F:YATY]TYPTYP,7,10)
+#                YFIELDS(INDEX, YCOL_TYPE) = "char"
+#              Elsif [F:YATY]TYPTYP = 8
+#                YFIELDS(INDEX, YCOL_TYPE) = "date"
+#              Endif
+#
+#              If [F:YAMZ]SAIAFF <> 3 & YFIELDS(INDEX, YCOL_VIS) = AVOID.ACHAR #NASCOSTO
+#                YFIELDS(INDEX, YCOL_VIS) =  "1"#"0"
+#              Else
+#                If YFIELDS(INDEX, YCOL_VIS) = AVOID.ACHAR
+#                  YFIELDS(INDEX, YCOL_VIS) = "0" #"1"
+#                Endif
+#              Endif
+#
+#              If [F:YAMZ]SAIAFF = 1 & YFIELDS(INDEX, YCOL_ENA) = AVOID.ACHAR #INSERITO
+#                  YFIELDS(INDEX, YCOL_ENA) = "1" #"0"
+#              Else
+#                If YFIELDS(INDEX, YCOL_ENA) = AVOID.ACHAR
+#                  YFIELDS(INDEX, YCOL_ENA) = "0" #"1"
+#                Endif
+#              Endif
+#
+#              #tipo Campo T o Dett
+#              If(YDETTBLKIDX=0)
+#                YFIELDS(INDEX, YCOL_DETT)="0"
+#              Else
+#                YFIELDS(INDEX, YCOL_DETT) = func YUTILS.STR_IIF([F:YAMZ]NUMBLOC = YDETTBLKIDX, "0", "1")
+#              Endif
+#
+#              INDEX+=1
+#          Next
+#          Filter [F:YAMZ]
+#        Endif
+#      Next
+#  Endif
+#
+#  #qui gestisco i campi di dettaglio nelle varie righe presenti
+#  Local Integer IX,YFOUND_IDX
+#
+#  For IX=INDEX To dim(YFIELDS,1)-1
+#
+#    YFOUND_IDX =func YUTILS.FIND_MULTITEM(YFIELDS, YFIELDS(IX,YCOL_NAME), 0)
+##Call ECR_TRACE(num$(YFOUND_IDX),0) From GESECRAN
+#
+#    If(vireblc(YFIELDS(IX,YCOL_NAME),2) <> AVOID.ACHAR & YFOUND_IDX >=0)
+#      #fieldType
+#      YFIELDS(IX, YCOL_TYPE) = YFIELDS(YFOUND_IDX,YCOL_TYPE)
+#
+#      #fieldValid
+#      If(vireblc(YFIELDS(IX, YCOL_VALID),2)=AVOID.ACHAR)
+#        YFIELDS(IX, YCOL_VALID) = "1"
+#      Endif
+#
+#      #fieldFocus
+#      #gestire riga corrente
+#      If(vireblc(YFIELDS(IX, YCOL_FOCUS),2)=AVOID.ACHAR)
+#        YFIELDS(IX, YCOL_FOCUS) = "0"
+#      Endif
+#
+#      #fieldVisible
+#      If(vireblc(YFIELDS(IX, YCOL_VIS),2)=AVOID.ACHAR)
+#        YFIELDS(IX, YCOL_VIS) = "1"
+#      Endif
+#
+#      #fieldEnter
+#      If(vireblc(YFIELDS(IX, YCOL_ENA),2)=AVOID.ACHAR)
+#        YFIELDS(IX, YCOL_ENA) = "1"
+#      Endif
+#
+#      #fieldRiquadro
+#      If(vireblc(YFIELDS(IX, YCOL_DETT),2)=AVOID.ACHAR)
+#        YFIELDS(IX, YCOL_DETT) = YFIELDS(YFOUND_IDX,YCOL_DETT)
+#      Endif
+#    Endif
+#  Next
+#End
+
+#########################################################################################################
+#**
+#* Funzione che restituisce il numero di campi di una Finestra - (vengono contati i parametri di ogni az.campo, in ugual n° ai campi di finestra, escludendo NBLIG,YAX3MRESP,YRESPONSE)
+#*
+#* @param YACTION Codice dell'azione (legata ad az. campo)
+#*!
+
+Funprog YCOUNT_WINFIELDS(YACTION)
+  Value Char YACTION
+
+  Local File ACTPAR [F:YATR] Where [F:YATR]ACTION = YACTION
+
+#IL -2 E' DOVUTO AL FATTO CHE NEL CONTEGGIO COMPLESSIVO DEI CAMPI DELLA FUNZIONE, SI ESCLUDONO YRESPONSE E YAX3MRESPONSE
+End rowcount ([F:YATR]) - 2
+
+
+##########################################################################################################
+#**
+#* Gestione FOCUS AX3M per campo corrente azione campo
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YFIELDCODE Codice campo corrente
+#* @param YMKSTAT Valore mkstat/intero per gestione di errore
+#*!
+
+Subprog YAX3MOB_FOCUS(YFIELDS,YFIELDCODE,YMKSTAT)
+
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer YMKSTAT
+
+  Local Integer YI, Y1EN  # Y1EN: indice primo campo abilitato (=editabile)
+  Const Integer YCOL_FOCUS : YCOL_FOCUS = 5  #focus
+
+  YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)   #indice del campo corrente nella matrice YFIELDS
+  Y1EN = func YFIND_FIRST_EN(YFIELDS,YI)           #calcolo indice 1° campo editabile (>=1)
+
+  If(Y1EN >0)
+     Case YMKSTAT
+        When 0,1 #ok (=0),warning (=1)
+          YFIELDS(YI,YCOL_FOCUS)= "0" #"1"      #focus non più sul campo corrente
+          YFIELDS(Y1EN,YCOL_FOCUS)= "1" # "0"   #focus spostato su primo campo editabile
+        When 2  #errore (=2)
+          YFIELDS(YI,YCOL_FOCUS)= "1" # "0" #focus su campo corrente
+        When Default
+     Endcase
+  Endif
+End
+
+#############################################################################################################
+#**
+#* Gestione FOCUS AX3M per campo corrente (di RIQUADRO)azione campo
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YFIELDCODE Codice campo corrente
+#* @param YMKSTAT Valore mkstat/intero per gestione di errore
+#* @param YPOS Posizione (=0 : riga1, =1 :riga2)
+#*!
+
+Subprog YAX3MOB_FOCUS_RIQUADRO(YFIELDS,YFIELDCODE,YMKSTAT,YPOS)
+
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer YMKSTAT
+  Value Integer YPOS
+
+  Local Integer YI, Y1EN  # Y1EN: indice primo campo abilitato (=editabile)
+  Const Integer YCOL_FOCUS : YCOL_FOCUS = 5  #focus
+
+  YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,YPOS)   #indice del campo corrente nella matrice YFIELDS
+  Y1EN = func YAX3MUTILS.YFIND_FIRST_EN(YFIELDS,YI)           #calcolo indice 1° campo editabile (>=1)
+
+  If(Y1EN >0)
+     Case YMKSTAT
+        When 0,1 #ok (=0),warning (=1)
+          YFIELDS(YI,YCOL_FOCUS)= "0" #"1"      #focus non più sul campo corrente
+          YFIELDS(Y1EN,YCOL_FOCUS)= "1" # "0"   #focus spostato su primo campo editabile
+        When 2  #errore (=2)
+          YFIELDS(YI,YCOL_FOCUS)= "1" # "0" #focus su campo corrente
+        When Default
+     Endcase
+  Endif
+End
+
+
+#############################################################################################################
+#**
+#* Ricerca Indice del primo campo visualizzato paretndo da quello corrente
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YCURRINDEX Indice campo corrente nella YFIELDS
+#*!
+
+Funprog YFIND_FIRST_EN(YFIELDS,YCURRINDEX)
+
+  Variable Char YFIELDS()(,)
+  Value Integer YCURRINDEX
+  Local Integer YI,YINDEX
+  YINDEX= -1
+
+  Const Integer YCOL_ENA : YCOL_ENA = 7
+  #Const Integer YCOL_VALID : YCOL_VALID = 3
+
+  For YI = YCURRINDEX+1 To dim(YFIELDS,1)-1
+    If(YFIELDS(YI,YCOL_ENA)="1")
+      YINDEX = YI
+      Break
+    Endif
+  Next
+
+End YINDEX
+
+#############################################################################################################
+#**
+#* Gestione ACTZO per X3/AX3M per un campo di maschera
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YMSKALIAS Codice videata corrente, in esame
+#* @param YFIELDCODE Codice campo da abilitare
+#*!
+
+Subprog YAX3MOB_ACTZO(YFIELDS,YMSKALIAS,YFIELDCODE)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+  Local Integer YI
+  Const Integer YCOL_ENA : YCOL_ENA = 7
+
+  If(![V]GWEBSERV) #X3
+    Actzo = "[M:"+YMSKALIAS+"]"+YFIELDCODE
+  Else #AX3M
+    YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)
+    YFIELDS(YI,YCOL_ENA)= "1"  #"0"
+  Endif
+End
+
+#############################################################################################################
+#**
+#* Gestione ACTZO per X3/AX3M per un campo di RIQUADRO
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YMSKALIAS Codice videata corrente, in esame
+#* @param YFIELDCODE Codice campo da abilitare
+#* @param CURRENTROW riga del riquadro
+#*!
+
+Subprog YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YMSKALIAS,YFIELDCODE,CURRENTROW)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+  Value Integer CURRENTROW
+
+  Local Integer YI
+  Const Integer YCOL_ENA : YCOL_ENA = 7
+
+  If(![V]GWEBSERV) #X3
+    Actzo = "[M:"+YMSKALIAS+"]"+YFIELDCODE + "(" + num$(CURRENTROW) + ")"
+  Else #AX3M
+    If(CURRENTROW=-1)
+      YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,0)
+    Else
+      YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,CURRENTROW)
+    Endif
+    If(YI>0)
+      YFIELDS(YI,YCOL_ENA)= "1"
+    Endif
+  Endif
+End
+
+##############################################################################################################
+#**
+#* Gestione DISZO per X3/AX3M per un campo di maschera
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YMSKALIAS Codice videata corrente, in esame
+#* @param YFIELDCODE Codice campo da abilitare
+#*!
+
+Subprog YAX3MOB_DISZO(YFIELDS,YMSKALIAS,YFIELDCODE)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+
+  Local Integer YI
+  Const Integer YCOL_ENA : YCOL_ENA = 7
+
+  If(![V]GWEBSERV) #X3
+    Diszo = "[M:"+YMSKALIAS+"]"+YFIELDCODE
+  Else #AX3M
+    YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)
+    YFIELDS(YI,YCOL_ENA)= "0"
+  Endif
+End
+
+##############################################################################################################
+#**
+#* Gestione DISZO per X3/AX3M per un campo di maschera di RIQUADRO
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YMSKALIAS Codice videata corrente/in esame
+#* @param YFIELDCODE Codice campo da abilitare
+#* @param CURRENTROW Riga corrente
+#*!
+
+Subprog YAX3MOB_DISZO_RIQUADRO(YFIELDS,YMSKALIAS,YFIELDCODE,CURRENTROW)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+  Value Integer CURRENTROW
+
+  Local Integer YI
+  Const Integer YCOL_ENA : YCOL_ENA = 7
+
+  If(![V]GWEBSERV) #X3
+    Diszo = "[M:"+YMSKALIAS+"]"+YFIELDCODE + "(" + num$(CURRENTROW) + ")"
+  Else #AX3M
+    If(CURRENTROW=-1)
+      YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,0)
+    Else
+      YI = func YUTILS.FIND_MULTITEM(YFIELDS,YFIELDCODE,CURRENTROW)
+    Endif
+    YFIELDS(YI,YCOL_ENA)= "0" #"1"
+  Endif
+End
+
+###############################################################################################################
+#**
+#* Gestione Visibilità/Invisibilità Campo di maschera
+#*
+#* @param YFIELDS Matrice dei campi
+#* @param YMSKNAME nOME videata corrente, in esame
+#* @param YFIELD Codice campo da mostrare/nascondere
+#* @param YVISIBLE flag per visibile/nascosto ( =1: visibile; =0: nascosto)
+#*!
+
+Subprog YAX3MOB_SETVISIBLE(YFIELDS,YMSKNAME,YMSKALIAS,YFIELDCODE,YVISIBLE)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKNAME
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+  Value Integer YVISIBLE
+
+  Local File AMSKZON [F:YAMZ]
+  Local File ATYPE [F:YATY]
+
+  Const Integer YCOL_TYPE : YCOL_TYPE = 1
+  Const Integer YCOL_VIS : YCOL_VIS = 6
+
+  Local Integer YI:YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)  #trovo riga
+  Local Char YTYPE(10): YTYPE = YFIELDS(YI,YCOL_TYPE)              #trovo tipo
+  Local Char YFIELDLEN(5)
+
+  If(![V]GWEBSERV)
+    Read [F:YAMZ]CODE = YMSKNAME;YFIELDCODE
+    Columns [F:YAMZ](CODMSK,CODZON,CODTYP)
+
+    Case YTYPE
+      When "char"
+         Default Mask "[M:"+YMSKALIAS+"]"
+      When "integer","decimal"
+      When "date"
+        #https://communityhub.sage.com/us/sage_x3/f/general-discussion/105244/dynamically-hiding-showing-screen-fields
+        Affzo = "[M:"+YMSKALIAS+"]"
+
+      When Default
+    Endcase
+  Else
+    YFIELDS(YI,YCOL_VIS)= num$(YVISIBLE)
+  Endif
+End
+#TODO: DA FINIRE & TESTARE!
+
+###############################################################################################################
+#**
+#* Gestione RAZ per X3/AX3M per un campo di maschera
+#*
+#* @param YFIELDS  matrice dei campi
+#* @param YMSKALIAS codice videata corrente, in esame
+#* @param YFIELDCODE codice campo da abilitare
+#*!
+
+Subprog YAX3MOB_RAZ(YFIELDS,YMSKALIAS,YMSKNAME,YFIELDCODE)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YMSKNAME
+  Value Char YFIELDCODE
+
+  Local File AMSKZON [YAMZ]
+  Local File ATYPE [YATY]
+
+  Const Integer YCOL_TYPE : YCOL_TYPE = 1
+  Const Integer YCOL_VALUE : YCOL_VALUE = 2
+  Local Char YTYPE(10)
+
+  If(![V]GWEBSERV) #X3
+
+    Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKNAME & [F:YAMZ]CODZON = YFIELDCODE)
+    #Tipo
+    Read [F:YATY]CODTYP = [F:YAMZ]CODTYP
+    #TYPTYP menu locale 30
+    If find([F:YATY]TYPTYP,1,2,3) <> 0
+      YTYPE = "integer"
+    Elsif find([F:YATY]TYPTYP,4,5,6)
+      YTYPE = "decimal"
+    Elsif find([F:YATY]TYPTYP,7,10)
+      YTYPE = "char"
+    Elsif [F:YATY]TYPTYP = 8
+      YTYPE = "date"
+    Endif
+
+    Default Mask "[M:"+YMSKALIAS+"]"
+    Case YTYPE
+      When "integer","decimal"
+        Assign "[M]"+YFIELDCODE With 0
+      When "char"
+        Assign "[M]"+YFIELDCODE With AVOID.ACHAR
+      When "date"
+        Assign "[M]"+YFIELDCODE With AVOID.ADATE
+      When Default
+    Endcase
+  Else #AX3M
+    Local Integer YI:YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)  #trovo riga
+    YTYPE = YFIELDS(YI,YCOL_TYPE)              #trovo tipo
+    YFIELDS(YI,YCOL_VALUE)= AVOID.ACHAR
+  Endif
+End
+
+###############################################################################################################
+#**
+#* Gestione RAZ per X3/AX3M per un campo di maschera
+#*
+#* @param YFIELDS  matrice dei campi
+#* @param YMSKALIAS codice videata corrente, in esame
+#* @param YFIELDCODE codice campo da abilitare
+#*!
+
+Subprog YAX3MOB_RAZ_RIQUADRO(YFIELDS,YMSKALIAS,YMSKNAME,YFIELDCODE,CURRENTROW)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YMSKNAME
+  Value Char YFIELDCODE
+  Value Integer CURRENTROW
+
+  Local File AMSKZON [YAMZ]
+  Local File ATYPE [YATY]
+
+  Const Integer YCOL_TYPE : YCOL_TYPE = 1
+  Const Integer YCOL_VALUE : YCOL_VALUE = 2
+  Local Char YTYPE(10)
+
+  If(![V]GWEBSERV) #X3
+
+    Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKNAME & [F:YAMZ]CODZON = YFIELDCODE)
+    #Tipo
+    Read [F:YATY]CODTYP = [F:YAMZ]CODTYP
+    #TYPTYP menu locale 30
+    If find([F:YATY]TYPTYP,1,2,3) <> 0
+      YTYPE = "integer"
+    Elsif find([F:YATY]TYPTYP,4,5,6)
+      YTYPE = "decimal"
+    Elsif find([F:YATY]TYPTYP,7,10)
+      YTYPE = "char"
+    Elsif [F:YATY]TYPTYP = 8
+      YTYPE = "date"
+    Endif
+
+    Default Mask "[M:"+YMSKALIAS+"]"
+    Case YTYPE
+      When "integer","decimal"
+        Assign "[M]" + YFIELDCODE + "(" + num$(CURRENTROW) + ")" With 0
+      When "char"
+        Assign "[M]" + YFIELDCODE + "(" + num$(CURRENTROW) + ")" With AVOID.ACHAR
+      When "date"
+        Assign "[M]" + YFIELDCODE + "(" + num$(CURRENTROW) + ")" With AVOID.ADATE
+      When Default
+    Endcase
+  Else #AX3M
+    Local Integer YI:YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)  #trovo riga
+    YTYPE = YFIELDS(YI,YCOL_TYPE)              #trovo tipo
+    YFIELDS(YI,YCOL_VALUE)= AVOID.ACHAR
+  Endif
+End
+
+###################################################################################################################
+#**
+#* Gestione AFFZO per X3 (SOLO X3) per un campo di maschera
+#*
+#* @param YMSKALIAS  Alias videata corrente/in esame
+#* @param YFIELDCODE  Codice campo su cui fare AFFZO
+#*!
+
+Subprog YAX3MOB_AFFZO(YMSKALIAS,YFIELDCODE)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+
+  If(![V]GWEBSERV)
+    Affzo ="[M:"+YMSKALIAS+"]"+YFIELDCODE
+  Endif
+End
+
+###################################################################################################################
+#**
+#* Gestione AFFZO per X3 (SOLO X3) per un campo di riquadro
+#*
+#* @param YMSKALIAS  Alias videata corrente/in esame
+#* @param YFIELDCODE  Codice campo su cui fare AFFZO
+#* @param CURRENTROW  Riga corrente riquadro
+#*!
+
+Subprog YAX3MOB_AFFZO_RIQUADRO(YMSKALIAS, YFIELDCODE, CURRENTROW)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+  Value Integer CURRENTROW
+
+  If(![V]GWEBSERV)
+    Affzo ="[M:"+YMSKALIAS+"]" + YFIELDCODE + "(" + num$(CURRENTROW) + ")"
+  Endif
+End
+
+###################################################################################################################
+#**
+#* Gestione AFFZO per X3 (SOLO X3) per aggiornamento variabile Fondo Riquadro
+#* (usato per Riquadro delle Consultazioni)
+#*
+#* @param YMSKALIAS  Alias videata corrente/in esame
+#* @param YNBLIGCODE Codice Campo associato avariabile fondo riquadro della videata in esame
+#* @param YNBLIGVAL  Valore da assegnare a variabile fondo Riquadro( N° righe da mostrare)
+#*!
+
+Subprog YAX3MOB_UPDATE_NBLIG(YMSKALIAS,YNBLIGCODE,YNBLIGVAL)
+
+  Value Char YMSKALIAS
+  Value Char YNBLIGCODE
+  Value Integer YNBLIGVAL
+
+  If(![V]GWEBSERV)
+    Default Mask "[M:"+YMSKALIAS+"]"
+    Assign "[M]"+YNBLIGCODE With YNBLIGVAL
+    Affzo = "[M:"+YMSKALIAS+"]"+YNBLIGCODE
+  Endif
+End
+
+###################################################################################################################
+#**
+#* Gestione EFFZO per X3/AX3M per un campo di maschera
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YMSKALIAS  Alias videata corrente, in esame
+#* @param YFIELDCODE  Codice campo su cui fare EFFZO
+#*!
+
+Subprog YAX3MOB_EFFZO(YFIELDS,YMSKALIAS,YFIELDCODE)
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+
+  If(![V]GWEBSERV) #solo su X3
+    Effzo = "[M:"+YMSKALIAS+"]"+YFIELDCODE
+  Else
+    # VA SETTATO YFIELDS SUL FIELDENTER
+    #Call YAX3MOB_RAZ(YFIELDS,YMSKALIAS,YFIELDCODE)
+    #da implementare logica mobile
+  Endif
+End
+
+###################################################################################################################
+#**
+#* Gestione GRIZO per X3/AX3M per un campo di maschera
+#*
+#* @param YFIELDS   Matrice dei campi
+#* @param YMSKALIAS Alias videata corrente, in esame
+#* @param YFIELDCODE Codice campo su cui fare GRIZO
+#*!
+
+Subprog YAX3MOB_GRIZO(YFIELDS,YMSKALIAS,YFIELDCODE)
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+
+  If(![V]GWEBSERV) #X3
+    Grizo = "[M:"+YMSKALIAS+"]"+YFIELDCODE
+  Else #AX3M
+    Call YAX3MOB_DISZO(YFIELDS,YMSKALIAS,YFIELDCODE)
+  Endif
+End
+
+###############################################################################################################
+
+#**
+#* Gestione GRIZO per X3/AX3M per un campo di riquadro
+#*
+#* @param YFIELDS   Matrice dei campi
+#* @param YMSKALIAS Alias videata corrente, in esame
+#* @param YFIELDCODE Codice campo su cui fare GRIZO
+#* @param CURRENTROW  Riga corrente riquadro
+#*!
+
+Subprog YAX3MOB_GRIZO_RIQUADRO(YFIELDS,YMSKALIAS,YFIELDCODE,CURRENTROW)
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+  Value Integer CURRENTROW
+
+  If(![V]GWEBSERV) #X3
+    Grizo = "[M:"+YMSKALIAS+"]"+YFIELDCODE + "(" + num$(CURRENTROW) + ")"
+  Else #AX3M
+    Call YAX3MOB_DISZO_RIQUADRO(YFIELDS,YMSKALIAS,YFIELDCODE,CURRENTROW)
+  Endif
+End
+
+###############################################################################################################
+#**
+#*
+# Function to find the first row with currentRow = 1
+#*!
+Funprog FIND_CURRENTROW(YFIELDS)
+  Variable Char YFIELDS()(,)
+
+  Local Integer YCURRENTROW : YCURRENTROW=-1
+
+    # Initializations
+  Local Integer I, NUMROWS, NUMCOLS, ROW_FOUND : [L]ROW_FOUND = 0
+  Local Char YFIELDNAME(50)
+
+  # Get the number of rows and columns in the array
+  NUMROWS = func YUTILS.COUNT_MULTI(YFIELDS)  # Length of the array for rows
+  NUMCOLS = dim(YFIELDS, 2)  # Length of the array for columns
+
+  For I = 0 To NUMROWS
+    #fieldRiquadro
+    If YFIELDS(I, 8) = "1"
+      If YFIELDNAME = AVOID.ACHAR
+        YFIELDNAME = YFIELDS(I, 0)
+      Endif
+      If YFIELDS(I, 0) = YFIELDNAME
+        YCURRENTROW += 1
+        If YFIELDS(I, 9) = "1" #currentRow
+          ROW_FOUND = 1
+          Break
+        Endif
+      Endif
+    Endif
+  Next
+
+  If YCURRENTROW >= 0 & ROW_FOUND = 0
+    End -1
+  Endif
+
+End YCURRENTROW
+
+############################################################################################################
+#**
+#* Gestione valore campo durante az campo (SOLO AX3M)
+#*
+#* @param YFIELDS  Matrice dei campi
+#* @param YMSKALIAS Codice videata corrente/in esame
+#* @param YFIELDCODE Codice campo corrente/in esame
+#* @param YFIELDVALUE Valore campo corrente
+#*!
+
+Subprog YAX3MOB_SETVALUE(YFIELDS,YMSKALIAS,YFIELDCODE,YFIELDVALUE)
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+  Value Char YFIELDCODE
+  Variable Char YFIELDVALUE
+
+  Local Integer YI
+
+  YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)
+  YFIELDS(YI,2)= YFIELDVALUE
+End
+
+#################################################################################################################
+#**
+#* Gestione Validità per campo corrente azione campo (SOLO AX3M)
+#*
+#* @param YFIELDS  matrice dei campi
+#* @param YFIELDCODE codice campo corrente
+#* @param YMKSTAT valore mkstat/intero per gestione errore
+#*!
+
+Subprog YAX3MOB_SETVALID(YFIELDS,YFIELDCODE,YMKSTAT)
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer YMKSTAT
+
+  Const Integer YCOL_VALID : YCOL_VALID=3
+  Local Integer YI : YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)
+
+  Case YMKSTAT
+    When 0  #ok
+      YFIELDS(YI,YCOL_VALID)= "1" #"0" #valid
+    When 1,2  #warning,errore
+      YFIELDS(YI,YCOL_VALID)= "0" #"1"
+    When Default
+  Endcase
+End
+
+#################################################################################################################
+#**
+#* Gestione Validità per campo corrente azione campo (SOLO AX3M)
+#*
+#* @param YFIELDS  matrice dei campi
+#* @param YFIELDCODE codice campo corrente
+#* @param YMKSTAT valore mkstat/intero per gestione errore
+#* @param YPOS Posizione (=0 : riga1, =1 :riga2)
+#*!
+
+Subprog YAX3MOB_SETVALID_RIQUADRO(YFIELDS,YCURRFIELD,YMKSTAT, YPOS)
+
+  Variable Char YFIELDS()(,)
+  Value Char YCURRFIELD
+  Value Integer YMKSTAT
+  Value Integer YPOS
+
+  Const Integer YCOL_VALID : YCOL_VALID=3
+  Local Integer YI : YI = func YUTILS.FIND_MULTITEM(YFIELDS,YCURRFIELD,YPOS)  #prendo il 1°:se T o D
+
+  Case YMKSTAT
+    When 0  #ok
+      YFIELDS(YI,YCOL_VALID)= "1" #"0" #valid
+    When 1,2  #warning,errore
+      YFIELDS(YI,YCOL_VALID)= "0" #"1"
+    When Default
+  Endcase
+End
+
+##################################################################################################################
+#**
+#* Gestione a fine Az Campo:
+#* 1) Eventuale gestione in Modifica
+#* 2) Aggiornamento matrice YFIELDS post az.campo;
+#* 3) Valorizzazione YRESPONSE;
+#* 4) [LOG] Stampa END_MATRIX, YRESPONSE su files nella crt per Log
+#*!
+
+$YAX3MOB_END_ACTIONFIELD
+
+  If(GWEBSERV)
+    #Nel caso ci sia un caricamento dei dati di riquadro, andiamo ad aggiornare la YFIELDS
+    If (YMODIF = 1)
+      Gosub YAX3MOB_MODIF
+    Endif
+
+    Gosub YAX3MOB_GLOBALSET
+    YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA,YSELECTEDFIELDS)
+    #YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
+  Endif
+
+  #LOG (END):
+  Gosub YAX3MOB_END From YAX3MLOG
+Return
+
+##################################################################################################################
+#**
+#* Gestione a fine Az Campo SENZA Impostazione automatica del Focus:
+#* 1) Eventuale gestione in Modifica
+#* 2) Aggiornamento matrice YFIELDS post az.campo;
+#* 3) Valorizzazione YRESPONSE;
+#* 4) [LOG] Stampa END_MATRIX, YRESPONSE su files nella crt per Log
+#*!
+
+$YAX3MOB_END_ACTIONFIELD_NOFOCUS
+
+  If(GWEBSERV)
+    # Nel caso ci sia un caricamento dei dati di riquadro, andiamo ad aggiornare la YFIELDS
+    If (YMODIF = 1)
+      Gosub YAX3MOB_MODIF
+    Endif
+
+    Gosub YAX3MOB_GLOBALSET_NOFOCUS
+    YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA,YSELECTEDFIELDS)
+    #YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA)
+  Endif
+
+  #LOG (END):
+  Gosub YAX3MOB_END From YAX3MLOG
+Return
+
+####################################################################################################################
+#**
+#* Sub per gestione in modalità Modifica
+#*!
+
+$YAX3MOB_MODIF
+
+  If clalev([F:YATR])=0 : Local File ACTPAR [F:YATR] : Endif
+
+  Local Char YEXCLUDE_PARAMS(20)(2)   #array con codici dei parametri da escludere
+  YEXCLUDE_PARAMS(0)="YAX3MRESP"
+  YEXCLUDE_PARAMS(1)="YRESPONSE"
+
+  Columns [F:YATR] (CODPAR,TYPPAR)
+  Filter [F:YATR] Where ([F:YATR]ACTION = YACTION & !find([F:YATR]CODPAR,YEXCLUDE_PARAMS))  #considero solo parametri(azione)omonimi a campi videata
+
+  Local Char YPARAM(50)
+  Local Integer I,J,YF,YCURRENTROW_INDEX,YFIRSTROW_INDEX,YROW_INDEX
+
+  #ciclo su tutte le righe di riquadro ricavate
+  For I = 0 To YMODIF_RIQUADRO_COUNT - 1
+    For [F:YATR]
+      YCURRENTROW_INDEX = -1
+      YPARAM = evalue("[F:YATR]CODPAR")            #ricavo il codice del Parametro dell'azione
+      YF = func YUTILS.FIND_ITEM(YFIELDS, YPARAM)  #prendo il 1°:se T o D
+
+      If(YFIELDS(YF,8)="1")#DETT
+        YCURRENTROW_INDEX = func YUTILS.FIND_MULTITEM(YFIELDS, YPARAM, I)
+        YROW_INDEX = I
+
+        If(YCURRENTROW_INDEX >= 0)
+          Gosub YAX3MOB_SETFIELD    #vecchia modalità (aggiornamento righe di dettaglio già presenti)
+        Else
+          #creo un nuovo item
+          YCURRENTROW_INDEX = func YUTILS.COUNT_MULTI(YFIELDS)      #indice nuovo elemento
+          YFIRSTROW_INDEX = func YUTILS.FIND_ITEM(YFIELDS, YPARAM)  #calcolo indice primo elemento di riquadro
+
+          #inizio a copiare l'ergonomia dei campi a venire, che ereditiamo da protocollo (esclusi i valori che sono settati nell'azione campo)
+          For J = 0 To dim(YFIELDS, 2) - 1
+            YFIELDS(YCURRENTROW_INDEX, J) = YFIELDS(YFIRSTROW_INDEX, J)
+          Next
+          Gosub YAX3MOB_SETFIELD_RIQUADRO_MODIF
+        Endif
+      Endif
+    Next
+  Next
+Return
+
+####################################################################################################################
+#**
+#* Gestione a fine Bottone Finestra con setting campi videata/e:
+#* 1) Aggiornamento matrice YFIELDS post az.campo;
+#* 2) Stampa matrice YFIELDS (END) su CRT:tmp;
+#* 3) valorizzazione YRESPONSE;
+#* 4) Stampa YRESPONSE su CRT: tmp
+#*!
+
+$YAX3MOB_END_BUTTONACTION
+
+  If(GWEBSERV)
+
+    If(toupper(YFUNC_TYPE)="CONS")
+
+      #Esiste anche la chiave "actions" (per gestione Multimedia)
+      #If(func YUTILS.COUNT(YMEDIA)>0 & COUNT_VALUES >0)
+      If(type(YMEDIA)>0 & func YUTILS.COUNT(YMEDIA)>0 & COUNT_VALUES >0)
+        NUM_COLS +=1
+        Call ECR_TRACE("NUm Col Griglia(con MEDIA):"-num$(NUM_COLS),0) From GESECRAN
+      Endif
+
+      If(COUNT_VALUES >0)
+        Gosub SEL_CONS From YAX3MSEL
+      Endif
+    Else
+      Gosub YAX3MOB_BUTTONGLOBALSET
+
+#      If(CURRENTROW =-1)
+#        Call YAX3MOB_PRINT_YFIELDS("end", YFIELDS, YACTION)
+#      Else
+#        Call YAX3MOB_PRINT_YFIELDS("end", YFIELDS, YACTION-"- row"-num$(CURRENTROW))
+#      Endif
+
+      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(mkstat,YALERT_TYPE,YALERT_MESSAGE,YALERT_WS,YOPENFUNCTION,YFIELDS,YHEADER,YDATA,YSELECTEDFIELDS)
+
+      #LOG YRESPONSE (vecchia versione)
+      #Call YPRINT_CLB(YRESPONSE, "YRESPONSE_" + YACTION, "json") From YUTILS
+
+      #LOG (END):
+      Gosub YAX3MOB_END From YAX3MLOG
+    Endif
+
+  Endif
+Return
+
+##################################################################################################################
+#**
+#* Sub collettrice : Aggiornamento matrice YFIELDS con 1) nuovi valori impostati durante az.campo, 2)impostazione validità campi, 3)impostazione focus sui campi
+#*!
+
+#$YAX3MOB_GLOBALSET
+#
+#  #1-values
+#  Gosub YAX3MOB_SETVALUES
+#
+#  If(vireblc(YCURRFIELD,2) <> AVOID.ACHAR)
+#    Local Integer YK: YK = func YUTILS.FIND_ITEM(YFIELDS,YCURRFIELD) #prendo il 1°:se T o D
+#    #2-valid
+#    Call YAX3MOB_SETVALID(YFIELDS,YCURRFIELD,mkstat) From YAX3MUTILS
+#    #3-focus
+#    Call YAX3MOB_FOCUS(YFIELDS,YCURRFIELD,mkstat) From YAX3MUTILS
+#  Endif
+#
+#Return
+
+############################################################################################################
+#**
+#* Sub collettrice : Aggiornamento matrice YFIELDS (a fine az. campo) con:
+#*  1) nuovi valori impostati durante az.campo,
+#*  2)impostazione validità campi,
+#*  3)impostazione focus sui campi
+#*!
+
+$YAX3MOB_GLOBALSET
+
+  Local Integer YK: YK = func YUTILS.FIND_ITEM(YFIELDS,YCURRFIELD) #prendo il 1°:se T o D
+
+  #1-values
+  If(YFIELDS(YK,8) = "0") #testata
+    Gosub YAX3MOB_SETVALUES
+  Else #dettaglio
+    Gosub YAX3MOB_SETVALUES_RIQUADRO
+  Endif
+
+  If(vireblc(YCURRFIELD,2)<>AVOID.ACHAR)
+    #2-valid
+    If(YFIELDS(YK,8) = "0") #testata
+      Call YAX3MOB_SETVALID(YFIELDS,YCURRFIELD,mkstat) From YAX3MUTILS
+    Else #dettaglio
+      YPOS = CURRENTROW
+      Call YAX3MOB_SETVALID_RIQUADRO(YFIELDS,YCURRFIELD,mkstat,YPOS)
+    Endif
+
+    #3-focus
+    If(YFIELDS(YK,8) = "0") #testata
+      Call YAX3MOB_FOCUS(YFIELDS,YCURRFIELD,mkstat) From YAX3MUTILS
+    Else #dettaglio
+      YPOS = CURRENTROW
+      Call YAX3MOB_FOCUS_RIQUADRO(YFIELDS,YCURRFIELD,mkstat,YPOS)
+    Endif
+  Endif
+Return
+
+############################################################################################################
+#**
+#* Sub collettrice : Aggiornamento matrice YFIELDS (a fine az. bottone di finestra) con:
+#*  1) nuovi valori impostati durante az.campo,
+#*  2)impostazione validità campi,
+#*  3)impostazione focus sui campi
+#*!
+
+$YAX3MOB_BUTTONGLOBALSET
+
+  Gosub YAX3MOB_SETVALUES_FROMBUTTON
+
+  If(vireblc(YCURRFIELD,2) <> AVOID.ACHAR)
+    Local Integer YK: YK = func YUTILS.FIND_ITEM(YFIELDS,YCURRFIELD) #prendo il 1°:se T o D
+    #2-valid
+    Call YAX3MOB_SETVALID(YFIELDS,YCURRFIELD,mkstat) From YAX3MUTILS
+    #3-focus
+    Call YAX3MOB_FOCUS(YFIELDS,YCURRFIELD,mkstat) From YAX3MUTILS
+  Endif
+Return
+
+##################################################################################################################
+#**
+#* Sub collettrice : Aggiornamento matrice YFIELDS (SENZA Focus)con 1) nuovi valori impostati durante az.campo, 2)impostazione validità campi, 3)impostazione focus sui campi
+#*!
+
+$YAX3MOB_GLOBALSET_NOFOCUS
+
+  Local Integer YK: YK = func YUTILS.FIND_ITEM(YFIELDS,YCURRFIELD) #prendo il 1°:se T o D
+  #1-values
+  If(YFIELDS(YK,8)="0")#testata
+    Gosub YAX3MOB_SETVALUES
+  Else #dettaglio
+    Gosub YAX3MOB_SETVALUES_RIQUADRO
+  Endif
+
+  If(vireblc(YCURRFIELD,2)<>AVOID.ACHAR)
+    #2-valid
+    If(YFIELDS(YK,8)="0")#testata
+      Call YAX3MOB_SETVALID(YFIELDS,YCURRFIELD,mkstat) From YAX3MUTILS
+    Else #dettaglio
+      YPOS = CURRENTROW
+      Call YAX3MOB_SETVALID_RIQUADRO(YFIELDS,YCURRFIELD,mkstat,YPOS)
+    Endif
+  Endif
+
+Return
+
+################################################################################################################
+
+$YAX3MOB_RAZFIELDMESSAGES
+
+  Local Integer YI
+  Const Integer YCOL_MEX : YCOL_MEX= 4
+  For YI = 0 To dim(YFIELDS,1)-1
+    YFIELDS(YI,YCOL_MEX) = AVOID.ACHAR
+  Next
+Return
+
+#################################################################################################################
+#**
+#* Aggiornamento matrice YFIELDS con valori di parametri dell'az.campo, esclusione di "YAX3MRESP", "YRESPONSE"
+#*!
+
+$YAX3MOB_SETVALUES
+
+  If clalev([F:YATR])=0 : Local File ACTPAR [F:YATR] : Endif
+  Local Char YEXCLUDE_PARAMS(20)(2)   #array con codici dei parametri da escludere
+
+  YEXCLUDE_PARAMS(0)="YAX3MRESP"
+  YEXCLUDE_PARAMS(1)="YRESPONSE"
+
+  #filtro i parametri dell'azione
+  Columns [F:YATR] (CODPAR)
+  Filter [F:YATR] Where ([F:YATR]ACTION = YACTION & !find([F:YATR]CODPAR,YEXCLUDE_PARAMS))  #considero solo parametri(azione)omonimi a campi videata
+
+  Local Char YPARAM(50)
+  Local Integer YCURRENTROW_INDEX
+  Local Integer YPOS #posizione da cercare nella matrice, CURRENTROW =-1,0,1,2,eec
+
+  For [F:YATR]
+    YPARAM = evalue("[F:YATR]CODPAR")
+
+    If(CURRENTROW = -1)
+      YPOS = 0
+    Else
+      YPOS = CURRENTROW
+    Endif
+
+    If type(CURRENTROW) >= 0 & CURRENTROW >= 0
+      YCURRENTROW_INDEX = func YUTILS.FIND_MULTITEM(YFIELDS, YPARAM, YPOS)
+    Else
+      YCURRENTROW_INDEX = func YUTILS.FIND_ITEM(YFIELDS, YPARAM)
+    Endif
+
+    If(YCURRENTROW_INDEX >= 0)
+      Gosub YAX3MOB_SETFIELD
+    Endif
+  Next
+Return
+
+#########################################################################################
+#**
+#* Aggiornamento matrice YFIELDS con valori di parametri dell'az.campo, esclusione di "YAX3MRESP", "YRESPONSE", per RIQUADRO
+#*!
+
+$YAX3MOB_SETVALUES_RIQUADRO
+
+  If clalev([F:YATR])=0 : Local File ACTPAR [F:YATR] : Endif
+  Local Char YEXCLUDE_PARAMS(20)(2)   #array con codici dei parametri da escludere
+
+  YEXCLUDE_PARAMS(0)="YAX3MRESP"
+  YEXCLUDE_PARAMS(1)="YRESPONSE"
+
+  Columns [F:YATR] (CODPAR)
+  Filter [F:YATR] Where ([F:YATR]ACTION = YACTION & !find([F:YATR]CODPAR,YEXCLUDE_PARAMS))  #considero solo parametri(azione)omonimi a campi videata
+
+  Local Char YPARAM(50)
+
+  For [F:YATR]
+    YPARAM = evalue("[F:YATR]CODPAR")
+    Local Integer YCURRENTROW_INDEX
+
+    Local Integer YPOS
+    Local Integer YZ : YZ = func YUTILS.FIND_ITEM(YFIELDS,YPARAM)
+
+    If(CURRENTROW = -1)
+      YPOS = 0
+    Else
+      If(YFIELDS(YZ,8) = "0")#testata
+        YPOS = 0
+      Else #dettaglio
+        YPOS = CURRENTROW
+      Endif
+    Endif
+
+    If(YFIELDS(YZ,8) = "0") #TESTATA
+        If type(CURRENTROW) >= 0 & CURRENTROW >= 0
+          YCURRENTROW_INDEX = func YUTILS.FIND_MULTITEM(YFIELDS, YPARAM, YPOS)
+          If(YCURRENTROW_INDEX >= 0)
+            Gosub YAX3MOB_SETFIELD
+          Endif
+        Else
+          YCURRENTROW_INDEX = func YUTILS.FIND_ITEM(YFIELDS, YPARAM)
+          If(YCURRENTROW_INDEX >= 0)
+            Gosub YAX3MOB_SETFIELD
+          Endif
+        Endif
+    Else
+      If type(CURRENTROW) >= 0 & CURRENTROW >= 0
+          YCURRENTROW_INDEX = func YUTILS.FIND_MULTITEM(YFIELDS, YPARAM, YPOS)
+          If(YCURRENTROW_INDEX >= 0)
+            Gosub YAX3MOB_SETFIELD_RIQUADRO
+          Endif
+        Else
+          YCURRENTROW_INDEX = func YUTILS.FIND_ITEM(YFIELDS, YPARAM)
+          If(YCURRENTROW_INDEX >= 0)
+            Gosub YAX3MOB_SETFIELD_RIQUADRO
+          Endif
+        Endif
+    Endif
+  Next
+Return
+
+#########################################################################################################
+#**
+#* Aggiornamento matrice YFIELDS con valori di parametri dell'az.campo, esclusione di "YAX3MRESP", "YRESPONSE",
+#* per Azione Bottone di Finestra, aggiornamento dei valori dei campi in YFIELDS  post Azione bottone
+#*!
+
+$YAX3MOB_SETVALUES_FROMBUTTON
+
+  If clalev([F:YATR])=0 : Local File ACTPAR [F:YATR] : Endif
+  Local Char YEXCLUDE_PARAMS(20)(2)   # Array con codici dei parametri da escludere
+  Local Integer YPOS, YCURRENTROW_INDEX, I, YITEM_POS, RIQUADRO_COUNT
+  Local Char YPARAM(50), YPARAMTMP(50)
+
+  YEXCLUDE_PARAMS(0)="YAX3MRESP"
+  YEXCLUDE_PARAMS(1)="YRESPONSE"
+
+  # Filtro i parametri dell'azione
+  Columns [F:YATR] (CODPAR)
+  Filter [F:YATR] Where ([F:YATR]ACTION = YACTION & !find([F:YATR]CODPAR,YEXCLUDE_PARAMS))
+
+  YPARAMTMP = AVOID.ACHAR
+  RIQUADRO_COUNT = 0
+
+  For J = 0 To func YUTILS.COUNT_MULTI(YFIELDS)
+    If YFIELDS(J, 8) = "1" & (YPARAMTMP = AVOID.ACHAR | YFIELDS(J, 0) = YPARAMTMP) # Elemento di riquadro
+      YPARAMTMP = YFIELDS(J, 0)
+      RIQUADRO_COUNT+=1
+    Endif
+  Next
+
+  For [F:YATR]
+    YPARAM = evalue("[F:YATR]CODPAR")
+    YITEM_POS = func YUTILS.FIND_ITEM(YFIELDS, YPARAM)
+
+    If YITEM_POS >= 0
+
+      If YFIELDS(YITEM_POS,8) = "0" # Elemento Testata
+        YCURRENTROW_INDEX = func YUTILS.FIND_ITEM(YFIELDS, YPARAM)
+        If YCURRENTROW_INDEX >= 0
+          Gosub YAX3MOB_SETFIELD
+        Endif
+      Else
+        For I = 0 To RIQUADRO_COUNT - 1
+          YCURRENTROW_INDEX = func YUTILS.FIND_MULTITEM(YFIELDS, YPARAM, I)
+          If YCURRENTROW_INDEX >= 0
+            Gosub YAX3MOB_SETFIELD
+          Endif
+        Next
+      Endif
+    Endif
+  Next
+
+  Filter [F:YATR] # pulisco l'alias
+Return
+
+##################################################################################################
+#**
+#* Imposto il valore nella matrice YFIELDS (fieldValue) in base al tipo dato(date, char, integer, decimal) e Valore di default
+#*!
+
+$YAX3MOB_SETFIELD
+
+  If(YFIELDS(YCURRENTROW_INDEX, 1) = "date")
+    If evalue(YPARAM) <> AVOID.ADATE
+      YFIELDS(YCURRENTROW_INDEX, 2) = format$("D:YYYY[-]MM[-]DD[T]hh[:]mm[:]ss[Z]", evalue(YPARAM))
+    Else
+      YFIELDS(YCURRENTROW_INDEX, 2) = format$("D:YYYY[-]MM[-]DD[T]hh[:]mm[:]ss[Z]", date$)
+    Endif
+  Elsif(YFIELDS(YCURRENTROW_INDEX, 1) = "char")
+    If vireblc(evalue(YPARAM), 2) = AVOID.ACHAR
+      YFIELDS(YCURRENTROW_INDEX, 2) = AVOID.ACHAR
+    Else
+      YFIELDS(YCURRENTROW_INDEX, 2) = num$(evalue(YPARAM))
+    Endif
+  Else
+    YFIELDS(YCURRENTROW_INDEX, 2) = num$(evalue(YPARAM))
+  Endif
+Return
+
+##########################################################################################################
+#**
+#* Imposto il valore nella matrice YFIELDS (fieldValue) in base al tipo dato(date, char, integer, decimal) e Valore di default, per RIQUADRO
+#*!
+
+$YAX3MOB_SETFIELD_RIQUADRO
+
+  If(YFIELDS(YCURRENTROW_INDEX, 1) = "date")
+    If evalue(YPARAM) <> AVOID.ADATE
+      YFIELDS(YCURRENTROW_INDEX, 2) = format$("D:YYYY[-]MM[-]DD[T]hh[:]mm[:]ss[Z]", evalue(YPARAM+"("+num$(CURRENTROW)+")"))
+    Else
+      YFIELDS(YCURRENTROW_INDEX, 2) = format$("D:YYYY[-]MM[-]DD[T]hh[:]mm[:]ss[Z]", date$)
+    Endif
+  Elsif(YFIELDS(YCURRENTROW_INDEX, 1) = "char")
+    If vireblc(evalue(YPARAM), 2) = AVOID.ACHAR
+      YFIELDS(YCURRENTROW_INDEX, 2) = AVOID.ACHAR
+    Else
+      YFIELDS(YCURRENTROW_INDEX, 2) = num$(evalue(YPARAM+"("+num$(CURRENTROW)+")"))
+    Endif
+  Else #decimal & int
+    YFIELDS(YCURRENTROW_INDEX, 2) = num$(evalue(YPARAM+"("+num$(CURRENTROW)+")"))
+  Endif
+Return
+
+###############################################################################################################
+#**
+#* Valorizzazione Valore campo Riquadro in Modalità: MODIFICA
+#*!
+
+$YAX3MOB_SETFIELD_RIQUADRO_MODIF
+
+  If(YFIELDS(YCURRENTROW_INDEX, 1) = "date")
+    If evalue(YPARAM) <> AVOID.ADATE
+      YFIELDS(YCURRENTROW_INDEX, 2) = format$("D:YYYY[-]MM[-]DD[T]hh[:]mm[:]ss[Z]", evalue(YPARAM+"("+num$(YROW_INDEX)+")"))
+    Else
+      YFIELDS(YCURRENTROW_INDEX, 2) = format$("D:YYYY[-]MM[-]DD[T]hh[:]mm[:]ss[Z]", date$)
+    Endif
+  Elsif(YFIELDS(YCURRENTROW_INDEX, 1) = "char")
+    If vireblc(evalue(YPARAM), 2) = AVOID.ACHAR
+      YFIELDS(YCURRENTROW_INDEX, 2) = AVOID.ACHAR
+    Else
+      YFIELDS(YCURRENTROW_INDEX, 2) = num$(evalue(YPARAM+"("+num$(YROW_INDEX)+")"))
+    Endif
+  Else #decimal & int
+    YFIELDS(YCURRENTROW_INDEX, 2) = num$(evalue(YPARAM+"("+num$(YROW_INDEX)+")"))
+  Endif
+Return
+
+#############################################################################################################
+#**
+#* Funzione per azzerare/pulire il riquadro Lato X3/lato Mobile
+#*
+#* @param YFIELDS Matrice dei campi di videata
+#* @param YMSKALIAS  Alias videata
+#*
+#*!
+
+Subprog YAX3MOB_RAZRIQUADRO(YFIELDS,YMSKALIAS)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+
+  Local File AMSKZON [F:YAMZ]
+  Local Integer YI,YJ,YK
+  Local Char YDETTFLDCODES(250)(50)
+  Local Char YDFLDCODE(250)
+  Local Char YTMPFIELDS(250)(dim(YFIELDS,1),dim(YFIELDS,2))
+
+  If(GWEBSERV)
+    For YI =0 To dim(YFIELDS,1)-1
+      #campo riquadro
+      If(YFIELDS(YI,8) = "1")
+
+        YDFLDCODE = YFIELDS(YI,0)
+        If(find(YDFLDCODE,YDETTFLDCODES)=0)
+          YDETTFLDCODES(YK) = YDFLDCODE
+          YK +=1
+        Else
+          #razzo tutta la riga matrice (codice campo compreso)
+          For YJ=0 To dim(YFIELDS,2)-1
+            Raz YFIELDS(YI,YJ)
+          Next
+        Endif
+      Endif
+    Next
+    Call YHANDLEMAT(YFIELDS,YTMPFIELDS) From YUTILS  #qui tolgo le righe vuote , riconfiguro la matrice
+  Else
+    #imposto  a 0(esempio: NBLIG = 0)
+    Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKALIAS & [F:YAMZ]DIME = 0)
+    Read [F:YAMZ] First
+    YNBLIGCODE = [F:YAMZ]CODZON # assumiamo un solo riquadro per videata
+
+    Default Mask "[M:"+YMSKALIAS+"]"
+    Assign "[M]"+YNBLIGCODE With 0
+    Affzo = "[M:"+YMSKALIAS+"]"+YNBLIGCODE
+  Endif
+End
+
+
+##########################################################################################################
+#                                     GESTIONE BOTTONE DI FINESTRA
+##########################################################################################################
+#**
+#* Metodo per composizione contenuto .csv
+#*
+#* @param YCSVTEXT Contenuto .csv da comporre
+#* @param YTEXT Testo da concatenare
+#* @param IS_LASTFIELD  Intero(booleano) per aggiungere o meno il separatore
+#*!
+
+Subprog YAX3MOB_APPEND(YCSVTEXT, YTEXT, IS_LASTFIELD)
+
+  Variable Clbfile YCSVTEXT
+  Value Char YTEXT
+  Value Integer IS_LASTFIELD
+
+  Append  YCSVTEXT, YTEXT
+  #Appendo il separaratore solo se non è l'ultimo campo, sennò aggiungo un LF
+  If(IS_LASTFIELD = 0)
+    Append  YCSVTEXT, ";"
+  Else
+    Append  YCSVTEXT, chr$(10)
+  Endif
+End
+
+##########################################################################################################
+#**
+#* Lancio modello di Import e memorizzazione contatore alla Creaz del Documento
+#*
+#* @param YIMPORT_MODEL Codice Modello di Import
+#* @param YCSVTEXT Contenuto csv
+#* @param YSTATUS Booleano
+#* @param YMESSAGE Messaggio da valorizzare
+#*!
+
+Subprog YAX3MOB_IMPORTSIL(YIMPORT_MODEL, YCSVTEXT, YSUCCESS, YMESSAGE)
+
+  Value Char YIMPORT_MODEL
+  Value Clbfile YCSVTEXT
+  Variable Integer YSUCCESS
+  Variable Char YMESSAGE
+
+  Local Integer YREQUEST_NUMBER
+  Local Char YEND(3) : YEND = "END"
+  #Local Char YMESSAGEIMP(250)
+
+  Append YCSVTEXT, YEND
+
+  #Lancio Modello di Import
+  If(vireblc(YIMPORT_MODEL,2)<> AVOID.ACHAR)
+
+    Call IMPORT(YIMPORT_MODEL, "NO", "REALTIME", chr$(10), YCSVTEXT, YREQUEST_NUMBER, YSUCCESS, YMESSAGE) From AOWSIMPORT
+    #YMESSAGE = func YUTILS.IIF(vireblc(YMESSAGE, 2) <> AVOID.ACHAR, YMESSAGE, func YAX3MOBGET_TRACE(GTRACE))
+
+    #Call ECR_TRACE("Stato import:" - num$(YSUCCESS) - " - Messaggio:" - YMESSAGE,0) From GESECRAN
+    Call YAX3MOB_ECRTRACE(0,"Stato import:" - num$(YSUCCESS) - " - Messaggio:" - YMESSAGE) From  YAX3MLOG  #log
+  Else
+    #Call ECR_TRACE("Modello di Import non esistente",0) From GESECRAN
+    Call YAX3MOB_ECRTRACE(2,"Modello di Import non esistente") From YAX3MLOG     #log
+  Endif
+End
+
+########################################################################################################
+#**
+#* Funzione per estrarre Errori da file di Traccia
+#*
+#* @param YFILNAM Nome file di traccia
+#*!
+
+Funprog YAX3MOBGET_TRACE(YFILNAM)
+  Value Char YFILNAM
+  # la risposta è di length 200 perchè uso già un'altra chiave status nel payload di risposta
+  Local Char YMESSAGE(250), YFILTRACE(250), YTRACETEXT(250)(100)
+  Local Integer ISFIRST, I
+
+  ISFIRST = 2
+  YFILTRACE= filpath("TRA", YFILNAM, "tra")
+
+  If filinfo(YFILTRACE, 0)>=0
+    Openi YFILTRACE Using [RL]
+    Iomode adxifs "" Using [RL]
+    Iomode adxirs chr$(10) Using [RL]
+    Iomode adxium GASCII Using [RL]
+    Repeat
+      Rdseq YTRACETEXT(I) Using [RL]
+      If instr(1, YTRACETEXT(I), "<0001") > 0
+        Call REPLACE(YTRACETEXT(I), "<0001", "") From YUTILS
+        If ISFIRST <> 2
+          YMESSAGE -= "-"
+        Endif
+        YMESSAGE -= YTRACETEXT(I)
+        ISFIRST = 1
+        If len(YMESSAGE) > 180
+          End escJson(mid$(YMESSAGE, 1, 180))
+        Endif
+      Endif
+      I+=1
+    Until fstat <> 0
+  Endif
+
+End escJson(YMESSAGE)
+
+#########################################################################################################
+#**
+#* Gestione messaggio dell'azione campo - X3/AX3M
+#*
+#* @param YFIELDS  matrice dei campi (lato X3: SOLO parametro formale)
+#* @param YFIELDCODE codice campo corrente/in esame (passato come stringa) (lato X3: SOLO parametro formale)
+#* @param YMKSTAT valore mkstat/intero per gestione di errore [X3/AX3M]
+#* @param YMESS testo messaggio da visualizzare [X3/AX3M]
+#*!
+
+Subprog YAX3MOB_SHOWMESS(YFIELDS,YFIELDCODE,YMKSTAT,YMESS)
+
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer YMKSTAT
+  Value Char YMESS
+
+  If(GTRACE <> AVOID.ACHAR)
+    #Gestione Traccia con messaggi in ROSSO(Errore), BLU (Warning), NERO(default)
+    Local Integer YTRACE_COLOR: YTRACE_COLOR =0
+    If(YMKSTAT=2 | YMKSTAT=1) #errore, warning
+      YTRACE_COLOR =1
+    Endif
+    Call ECR_TRACE("Campo :"-YFIELDCODE-" - Messaggio :"-YMESS, YTRACE_COLOR) From GESECRAN
+  Endif
+
+  If(!GWEBSERV)  #X3
+
+    #If(GTRACE = AVOID.ACHAR) #per gestione NON Batch
+      Case YMKSTAT
+        When 0  #ok
+          Call MESSAGE(YMESS) From GESECRAN
+        When 1  #warning
+          Local Integer OKCAN : OKCAN = 2
+          Call AVERTIR(YMESS,OKCAN) From GESECRAN
+        When 2  #errore
+          Call ERREUR(YMESS) From GESECRAN
+        When Default
+      Endcase
+   # Endif
+  Else #AX3M
+    Const Integer YCOL_MEX : YCOL_MEX= 4
+    Local Integer YI : YI = func YUTILS.FIND_ITEM(YFIELDS, YFIELDCODE)
+    If (YI >= 0)
+      YFIELDS(YI, YCOL_MEX) = YMESS  #mex
+    Else
+      Call ECR_TRACE("Campo" - YFIELDCODE - "non trovato!", 0) From GESECRAN
+    Endif
+  Endif
+End
+
+########################################################################################################
+#**
+#* Gestione della label (Solo lato Mobile)
+#*
+#* @param YFIELDS Matrice dei campi
+#* @param YFIELDCODE Codice del campo a cui applicare la label
+#* @param YMKSTAT Intero(booleano) per tipologia di label (rossa(errore)/blu(informativa))
+#* @param YMESS Messaggio da visualizzare nella label
+#* @param CURRENTROW Riga corrente
+#*!
+
+Subprog YAX3MOB_SETLABEL(YFIELDS,YFIELDCODE,YMKSTAT,YMESS,CURRENTROW)
+
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer YMKSTAT
+  Value Char YMESS
+  Value Integer CURRENTROW
+
+  If(GWEBSERV)
+    Const Integer YCOL_MEX : YCOL_MEX= 4
+    Local Integer YK: YK = func YUTILS.FIND_ITEM(YFIELDS, YFIELDCODE)
+
+    If (YK >= 0)
+       If(YFIELDS(YK,8)="0")#testata
+        YFIELDS(YK, YCOL_MEX) = YMESS  #mex
+       Else
+        Local Integer YI : YI = func YUTILS.FIND_MULTITEM(YFIELDS, YFIELDCODE,CURRENTROW)
+        YFIELDS(YI, YCOL_MEX) = YMESS  #mex
+       Endif
+    Else
+      Call ECR_TRACE("Campo" - YFIELDCODE - "non trovato!", 0) From GESECRAN
+    Endif
+  Endif
+End
+
+#################################################################################
+#**
+#* Funzione per pulire Label di un campo (YFIELDCODE) [funzionalità solo lato Mobile]
+#*
+#* @param YFIELDS Matrice dei campi di videata
+#* @param YFIELDCODE Codice campo di cui pulire la label
+#* @param CURRENTROW Riga
+#*!
+Subprog YAX3MOB_RAZLABEL(YFIELDS,YFIELDCODE,CURRENTROW)
+
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer CURRENTROW
+  Call YAX3MOB_SETLABEL(YFIELDS,YFIELDCODE,0,AVOID.ACHAR,CURRENTROW)
+End
+
+#################################################################################
+#**
+#* Funzione per pulire tutti messaggi/label lato Mobile
+#*
+#* @param YFIELDS Matrice dei campi di videata
+#*!
+
+Subprog YAX3MOB_RAZMESSAGES(YFIELDS)
+
+  Variable Char YFIELDS()(,)
+  Local Integer YI
+  Const Integer YCOL_MEX : YCOL_MEX = 4
+
+  If(GWEBSERV)
+    For YI =0 To dim(YFIELDS,1)-1
+      YFIELDS(YI, YCOL_MEX) = AVOID.ACHAR  #mex/label
+    Next
+  Endif
+End
+
+########################################################################################################
+#**
+#* Gestione messaggio dell'azione campo - X3/AX3M
+#*
+#* @param YFIELDS  matrice dei campi (lato X3: SOLO parametro formale)
+#* @param YFIELDCODE codice campo corrente/in esame (passato come stringa) (lato X3: SOLO parametro formale)
+#* @param YMKSTAT valore mkstat/intero per gestione di errore [X3/AX3M]
+#* @param YMESS testo messaggio da visualizzare [X3/AX3M]
+#* @param CURRENTROW riga corrente
+#*!
+
+Subprog YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS,YFIELDCODE,YMKSTAT,YMESS,CURRENTROW)
+
+  Variable Char YFIELDS()(,)
+  Value Char YFIELDCODE
+  Value Integer YMKSTAT
+  Value Char YMESS
+  Value Integer CURRENTROW
+
+  If(GTRACE <> AVOID.ACHAR)
+    #Gestione Traccia con messaggi in ROSSO(Errore), BLU (Warning), NERO(default)
+    Local Integer YTRACE_COLOR: YTRACE_COLOR =0
+    If(YMKSTAT=2 | YMKSTAT=1) #errore, warning
+      YTRACE_COLOR =1
+    Endif
+    #Call ECR_TRACE("Campo :"-YFIELDCODE-" - Messaggio :"-YMESS, YTRACE_COLOR) From GESECRAN
+  Endif
+
+  If(!GWEBSERV)  #X3
+    #If(GTRACE = AVOID.ACHAR) #per gestione NON Batch
+      Case YMKSTAT
+        When 0  #ok
+          Call MESSAGE(YMESS) From GESECRAN
+        When 1  #warning
+          Local Integer OKCAN : OKCAN = 2
+          Call AVERTIR(YMESS,OKCAN) From GESECRAN
+        When 2  #errore
+          Call ERREUR(YMESS) From GESECRAN
+        When Default
+      Endcase
+   # Endif
+  Else #AX3M
+    Const Integer YCOL_MEX : YCOL_MEX= 4
+    Local Integer YI : YI = func YUTILS.FIND_MULTITEM(YFIELDS, YFIELDCODE,CURRENTROW)
+    If (YI >= 0)
+      YFIELDS(YI, YCOL_MEX) = YMESS  #mex
+    Else
+      #Call ECR_TRACE("Campo" - YFIELDCODE - "non trovato!", 0) From GESECRAN
+    Endif
+  Endif
+End
+
+#########################################################################################################
+#**
+#* Visualizzazione eventuale Messaggio per azione Bottone di Finestra , a video (X3/Mobile)
+#*
+#* @param YMKSTAT  Intero (booleano)
+#* @param YMESSAGE Messaggio da vsiualizzare
+#* @param YALERT_TYPEINT tipo alert (gestione manuale)
+#*!
+
+#DEPRECATO!!!
+
+Subprog YAX3MOB_SHOWALERTMESS(YMKSTAT,YMESSAGE,YALERT_TYPEINT,YRESPONSE)
+
+  Value Integer YMKSTAT
+  Value Char YMESSAGE
+  Value Integer YALERT_TYPEINT
+  Variable Clbfile YRESPONSE
+
+  If(!GWEBSERV)#X3
+    Case YMKSTAT
+      When 0  #ok
+        Call MESSAGE(YMESSAGE) From GESECRAN
+      When 1  #warning
+        Local Integer OKCAN : OKCAN = 2
+        Call AVERTIR(YMESSAGE, OKCAN) From GESECRAN
+      When 2  #errore
+        Call ERREUR(YMESSAGE) From GESECRAN
+      When Default
+    Endcase
+  Else #Mobile
+    Local Char YFIELDS(0)(1,1)
+    Local Char YALERT_WS(50)(1..3,1..3)
+    Local Char YALERT_TYPE(20)
+    Local Char YHEADER(0)(1,1)
+    Local Char YDATA(0)(1,1)
+
+    Case YMKSTAT
+      When 0  #ok
+        YALERT_TYPE = "toast"
+      When 1  #warning/info
+        YALERT_TYPE = "info"
+      When 2  #errore
+        YALERT_TYPE = "error"
+      When Default
+    Endcase
+    #YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(YMKSTAT,YALERT_TYPE,YMESSAGE,YALERT_WS,YFIELDS,YHEADER,YDATA)
+  Endif
+End
+
+#########################################################################################################
+#########################################################################################################
+##Con questa funzione setto esclusivamente le variabili ALERT_TYPE E ALERT_MESSAGE per riferimento
+
+#**
+#* Visualizzazione eventuale Messaggio per azione Bottone di Finestra, a video (X3/Mobile).
+#* ( Con questa funzione setto esclusivamente le variabili ALERT_TYPE E ALERT_MESSAGE per riferimento )
+#*
+#* @param YMKSTAT  Intero (booleano)
+#* @param ALERT_TYPE Tipo Alert
+#* @param ALERT_MESSAGE Messaggio da visualizzare nell'Alert
+#*!
+
+Subprog YAX3MOB_SHOWALERT(YMKSTAT,ALERT_TYPE,ALERT_MESSAGE)
+
+  Value Integer YMKSTAT
+  Variable Char ALERT_TYPE
+  Variable Char ALERT_MESSAGE
+
+  If(!GWEBSERV)#X3
+    Case YMKSTAT
+      When 0  #ok
+        Call MESSAGE(ALERT_MESSAGE) From GESECRAN
+      When 1  #warning
+        Local Integer OKCAN : OKCAN = 2
+        Call AVERTIR(ALERT_MESSAGE, OKCAN) From GESECRAN
+      When 2  #errore
+        Call ERREUR(ALERT_MESSAGE) From GESECRAN
+      When Default
+    Endcase
+  Else #Mobile
+    Case YMKSTAT
+      When 0  #ok
+        ALERT_TYPE = "toast"
+      When 1  #warning/info
+        ALERT_TYPE = "info"
+      When 2  #errore
+        ALERT_TYPE = "error"
+      When Default
+    Endcase
+  Endif
+End
+
+##########################################################################################################
+Subprog YSTRVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
+
+  Variable Char YVALEURARR()()
+  Variable Char YVALEURVAR
+  Value Integer CURRENTROW
+
+  If(!GWEBSERV)
+    YVALEURVAR =YVALEURARR(0)
+  Else
+    If(CURRENTROW >=0)
+      YVALEURVAR =YVALEURARR(CURRENTROW)
+    Endif
+  #YVALEURVAR =YVALEURARR(CURRENTROW)
+  Endif
+End
+
+Subprog YSETSTRVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
+
+  Variable Char YVALEURARR()()
+  Variable Char YVALEURVAR
+  Value Integer CURRENTROW
+
+  If(!GWEBSERV)
+    YVALEURARR(0)=YVALEURVAR
+  Else
+    YVALEURARR(CURRENTROW)=YVALEURVAR
+  Endif
+End
+
+##############################################################################################################
+Subprog YINTVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
+
+  Variable Integer YVALEURARR()
+  Variable Integer YVALEURVAR
+  Value Integer CURRENTROW
+
+  If(!GWEBSERV)
+    YVALEURVAR =YVALEURARR(0)
+  Else
+    If(CURRENTROW >=0)
+      YVALEURVAR =YVALEURARR(CURRENTROW)
+    Endif
+    #YVALEURVAR =YVALEURARR(CURRENTROW)
+  Endif
+End
+
+#############################################################################################################
+Subprog YDECVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
+
+  Variable Decimal YVALEURARR()
+  Variable Decimal YVALEURVAR
+  Value Integer CURRENTROW
+
+  If(!GWEBSERV)
+    YVALEURVAR =YVALEURARR(0)
+  Else
+    If(CURRENTROW >=0)
+      YVALEURVAR =YVALEURARR(CURRENTROW)
+    Endif
+    #YVALEURVAR =YVALEURARR(CURRENTROW)
+  Endif
+End
+##################################################################################################################
+Subprog YSETDECVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
+
+  Variable Decimal YVALEURARR()
+  Variable Decimal YVALEURVAR
+  Value Integer CURRENTROW
+
+  If(!GWEBSERV)
+    YVALEURARR(0)=YVALEURVAR
+  Else
+    If(CURRENTROW >=0)
+      YVALEURARR(CURRENTROW)=YVALEURVAR
+    Endif
+  Endif
+End
+
+#############################################################################################################
+Subprog YDATEVALEUR(YVALEURARR,YVALEURVAR,CURRENTROW)
+
+  Variable Date YVALEURARR()
+  Variable Date YVALEURVAR
+  Value Integer CURRENTROW
+
+  If(!GWEBSERV)
+    YVALEURVAR =YVALEURARR(0)
+  Else
+    If(CURRENTROW >=0)
+      YVALEURVAR =YVALEURARR(CURRENTROW)
+    Endif
+    #YVALEURVAR =YVALEURARR(CURRENTROW)
+  Endif
+End
+
+##########################################################################################################
+#                                   DEBUG
+##########################################################################################################
+#**
+#* Metodo per stampa su .txt su cartella "tmp" della matrice YFIELDS
+#*
+#* @param YWHEN Settore
+#* @param YFIELDS matrice YFIELDS
+#* @param YACTION Azione X3 in esame
+#*!
+
+Subprog YAX3MOB_PRINT_YFIELDS(YWHEN, YFIELDS, YACTION)
+  Value Char YWHEN
+  Value Char YFIELDS()(,)
+  Value Char YACTION
+
+  Local Integer XDIM : XDIM = func YUTILS.COUNT_MULTI(YFIELDS) - 1
+  Local Integer YDIM : YDIM = dim(YFIELDS,2)-1
+  Local Integer I, J
+
+  Gosub YSET_COLKEYS From YJSONDESERIALIZE
+
+  Local Char YFIL(250)
+  Local Char YNOW(50) : YNOW = ctrans(func YUTILS.YFORMATDATE(num$(datetime$),"DT"),":", "")
+  YFIL = filpath("tmp", "print_yfields_"+YACTION+"_"+ YWHEN+ "_" + YNOW, "txt")
+  Openo YFIL Using [YF]
+  Iomode adxium GUTF8 Using [YF]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF]
+  Wrseq "xdim = " - num$(XDIM)- "ydim = "-num$(dim(YFIELDS,2)) Using [YF]
+
+  For I = 0 To XDIM
+    Wrseq "New item:"  Using [YF]
+    For J = 0 To YDIM
+      Wrseq num$(I) + "," + num$(J) - "-" - YCOL_KEYS(J) + ":" - YFIELDS(I,J) Using [YF]
+    Next J
+  Next
+  Openo Using [YF]
+
+End
+
+########################################################################################
+#**
+#*  Metodo per stampa su .txt su cartella LogDir della matrice YFIELDS
+#*
+#* @param YDIR Nome directory
+#* @param YWHEN  Momento: "init", "end"
+#* @param YFIELDS Matrice YFIELDS
+#* @param YACTION Azione lanciata
+#* @param YCURRENTUSER  Utente loggato
+#*!
+
+Subprog YAX3MOB_PRINT_DIR_YFIELDS(YDIR, YWHEN, YFIELDS, YACTION,YCURRENTUSER)
+
+  Value Char YDIR
+  Value Char YWHEN
+  Value Char YFIELDS()(,)
+  Value Char YACTION
+  Value Char YCURRENTUSER
+
+  Local Integer XDIM : XDIM = func YUTILS.COUNT_MULTI(YFIELDS) - 1
+  Local Integer YDIM : YDIM = dim(YFIELDS,2)-1
+  Local Integer I, J
+
+  Gosub YSET_COLKEYS From YJSONDESERIALIZE
+
+  Local Char YFIL(250)
+  Local Char YNOW(50) : YNOW = ctrans(func YUTILS.YFORMATDATE(num$(datetime$),"DT"),":", "")
+  YFIL = filpath(YDIR, "print_yfields_"+YACTION+"_("+YCURRENTUSER+")"+"_"+ YWHEN+ "_" + YNOW, "txt")
+  Openo YFIL Using [YF]
+  Iomode adxium GUTF8 Using [YF]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF]
+  Wrseq "xdim = " - num$(XDIM)- "ydim = "-num$(dim(YFIELDS,2)) Using [YF]
+
+  For I = 0 To XDIM
+    Wrseq "New item:"  Using [YF]
+    For J = 0 To YDIM
+      Wrseq num$(I) + "," + num$(J) - "-" - YCOL_KEYS(J) + ":" - YFIELDS(I,J) Using [YF]
+    Next J
+  Next
+  Openo Using [YF]
+
+End
+
+##################################################################################################
+#                             Funzioni Utilità Gestione MULTIMEDIA
+##################################################################################################
+#**
+#* Funzione che ritorna il json con tutte le azioni multimediali abilitate(es: email, phone, position, link)
+#*
+#* @param YMMEDIAENABLED Matrice con tutte le azioni-media abilitate
+#*!
+
+Funprog YGETMULTIMEDIA(YMMEDIAENABLED)
+
+  Value Char YMMEDIAENABLED()(,)
+
+  Local Char YRESULT(250)
+  Local Integer YI,YMMEDIANUM: YMMEDIANUM = dim(YMMEDIAENABLED,1)  #N° delle azioni (media) previsti
+
+  Local Char YACTIONS(250)(YMMEDIANUM)
+  Local Char YMMEDIA_ITEM(250)(2)
+
+  #Append YJSONRESULT, func YJSONSERIALIZE.GET_OPENCURLYBRACKET()     #{
+
+  #ottengo oggetti per : email, phone, position, link...
+  For YI=0 To YMMEDIANUM-1
+    YMMEDIA_ITEM(0) = func YJSONSERIALIZE.GET_STR("type",func YGETMEDIATYPE(YMMEDIAENABLED(YI,0)), 1)
+    YMMEDIA_ITEM(1) = func YJSONSERIALIZE.GET_STR("value",YMMEDIAENABLED(YI,1), 1)
+    YACTIONS(YI) = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, YMMEDIA_ITEM, 1, 1)
+  Next
+
+  YRESULT = func YJSONSERIALIZE.GET_STRARRAY_FROM_STRARRAY("actions", YACTIONS, 1) #actions : [{},..,{}]
+  #Append YJSONRESULT, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()    #}
+
+End YRESULT
+
+###################################################################################################################
+#**
+#* Funzione che ritorna il valore dell'"Enum" associato al tipo di media
+#*
+#* @param YMEDIATYPE
+#*!
+
+Funprog YGETMEDIATYPE(YMEDIATYPE)
+
+  Value Char YMEDIATYPE
+  Local Char YMEDIA (10)
+
+  Case YMEDIATYPE
+    When "0"
+      YMEDIA = "email"
+    When "1"
+      YMEDIA = "phone"
+    When "2"
+      YMEDIA = "position"
+    When "3"
+      YMEDIA = "link"
+    When Default
+  Endcase
+End YMEDIA
+
+#########################################################################################
+
+$YMEDIACONST
+
+  Const Integer CONST_EMAIL: CONST_EMAIL = 0
+  Const Integer CONST_PHONE: CONST_PHONE = 1
+  Const Integer CONST_POSITION: CONST_POSITION = 2
+  Const Integer CONST_LINK: CONST_LINK = 3
+Return
+
+##################################################################################################################
+#                                                    UTILITà PER ANAGRAFICA X3
+##################################################################################################################
+#**
+#* Metodo per estrarre codice Sottoprogramma (X3) dato codice Azione in anagrafica
+#*
+#* @param YACTION Codice azione
+#*!
+
+Funprog YGET_SUBPRGNAME(YACTION)
+
+  Value Char YACTION
+  Local Char YSUBPRGNAME(30)
+  Local File ACTION [F:YACT]
+
+  Columns [F:YACT](SUBPRG)
+  Read [F:YACT]ACTION = YACTION
+  If(!fstat)
+    YSUBPRGNAME = [F:YACT]SUBPRG
+  Endif
+
+End YSUBPRGNAME
+
+######################################################################################
+#**
+#* Metodo per determinare la dimensione di un Parametro di un Sottoprogramma di X3
+#*
+#* @param YSUBPRGNAME Codice del Sottoprogramma di X3
+#* @param YFIELDCODE  Codice del parametro del Sottoprogramma
+#*!
+Funprog YGET_DIMEPARAM(YSUBPRGNAME, YFIELDCODE)
+
+  Value Char YSUBPRGNAME
+  Value Char YFIELDCODE
+  Local Integer YDIME
+  Local File ASUBPROGD [F:YASP]
+
+  Filter [F:YASP] Where ([F:YASP]SUBPRG = YSUBPRGNAME & [F:YASP]PARAM = YFIELDCODE)
+  Columns [F:YASP](DIME)
+  Read [F:YASP] First
+  YDIME = [F:YASP]DIME
+  Filter [F:YASP]
+
+End YDIME

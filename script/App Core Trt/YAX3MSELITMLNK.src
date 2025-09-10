@@ -31,14 +31,19 @@ Return
 #Uscite
 $ITM_USC
 
-  Gosub SET_LINK_ENT_USC_SOH
+  #Gosub SET_LINK_ENT_USC_SOH
+  Gosub SET_LINK_ENT
 
   If (IS_MOBILE = 1)
-    Gosub INIT_CRITERE_USC_FIELDS
+    #Gosub INIT_CRITERE_USC_FIELDS
   Endif
 
-  Gosub SET_CRITERE_ENT_USC_SOH
-  Gosub SET_TITCOL_ENT_USC_SOH
+  #Gosub SET_CRITERE_ENT_USC_SOH
+  Gosub SET_CRITERE_ENT            #sel multi val
+
+  #Gosub SET_TITCOL_ENT_USC_SOH
+  Gosub SET_TITCOL_ENT             #sel multi val
+
 Return
 
 
@@ -103,9 +108,10 @@ $SET_LINK_CSTK
 
   Link [YSTO] With [YITF]ITF0~=[YSTO]ITMREF;[YSTO]STOFCY,
 &                  [YITM]ITM0~=[YSTO]ITMREF
-&             As [LNK] Where ([YSTO]STOFCY = PARAMS(0) & [YSTO]LOC = PARAMS(1) & [F:YSTO]STA = "A")
+&             As [LNK] Where ([YSTO]STOFCY = PARAMS(0) & [YSTO]LOC = PARAMS(1) & [YSTO]STA = "A" & [YSTO]QTYSTU - [YSTO]CUMALLQTY - [YSTO]CUMWIPQTY >0)
 
-  Columns [LNK] ([F:YITM]ITMREF,[F:YITM]ITMDES1,[F:YITM]TCLCOD,[F:YITM]SEAKEY,[F:YITM]EANCOD,[F:YITM]ITMSTA,[F:YSTO]STOFCY,[F:YSTO]LOC)
+  Columns [LNK] ([F:YITM]ITMREF,[F:YITM]ITMDES1,[F:YITM]TCLCOD,[F:YITM]SEAKEY,[F:YITM]EANCOD,[F:YITM]ITMSTA,[F:YSTO]STOFCY,[F:YSTO]LOC,
+&                [F:YSTO]STA ,[F:YSTO]LOT,[F:YSTO]SERNUM,[F:YSTO]PCUSTUCOE)
 
 Return
 
@@ -159,7 +165,9 @@ Return
 
 $SET_TITCOL_CSTK
 
-  NUM_COLS = 6
+  #NUM_COLS = 6
+  #
+  NUM_COLS = 10
   Default File [LNK]
 
   Call TEXTFIC("ITMMASTER","ITMREF",2,TIT(NBCOL)) From OBJDIV
@@ -174,6 +182,15 @@ $SET_TITCOL_CSTK
   COL(NBCOL) = "[F:YITM]EANCOD"
   NBCOL += 1 : Call TEXTFIC("ITMMASTER","ITMSTA",2,TIT(NBCOL)) From OBJDIV
   COL(NBCOL) = "mess([F:YITM]ITMSTA,246,1)"
+  #
+  NBCOL += 1 : Call TEXTFIC("STOCK","LOT",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]LOT"
+  NBCOL += 1 : Call TEXTFIC("STOCK","SERNUM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]SERNUM"
+  NBCOL += 1 : Call TEXTFIC("STOCK","PCUSTUCOE",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]PCUSTUCOE"
+  NBCOL += 1 : Call TEXTFIC("STOCK","STA",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]STA"
 
 Return
 
@@ -248,7 +265,13 @@ $SET_CRITERE_ENT
     #DEFPAG = 1
     NBCOL = 1
     Local Char CRITERE(250)
-    CRITERE = "[F:YITF]STOFCY = '" + FCY + "'"
+    #CRITERE = "[F:YITF]STOFCY = '" + FCY + "'"
+    CRITERE = "[F:YITF]STOFCY = '" + PARAMS(0) + "'"
+
+    #Filtro su campo stesso: ITMREF = PARAMS(1)
+    If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+      CRITERE-= "& instr(1, tolower([F:YITF]ITMREF), tolower('" + PARAMS(1) + "'))<>0"
+    Endif
   Endif
 
 Return
@@ -257,7 +280,9 @@ Return
 
 $SET_CRITERE_CSTK
 
-  NUM_COLS = 6
+  #NUM_COLS = 6
+  #
+  NUM_COLS = 10
 
   If IS_MOBILE = 2
     Gosub INIT_GRID
@@ -265,6 +290,8 @@ $SET_CRITERE_CSTK
     COUNT_VALUES = rowcount([LNK])
     FIELDS(0) = "ITMREF" : FIELDS(1) = "ITMDES1" : FIELDS(2) = "TCLCOD"
     FIELDS(3) = "SEAKEY" : FIELDS(4) = "EANCOD" : FIELDS(5) = "ITMSTA"
+    #
+    FIELDS(6) = "LOT" : FIELDS(7) = "SERNUM" : FIELDS(8) = "PCUSTUCOE" : FIELDS(9) = "STA"
     NBCOL = 0
   Else
     GSELFAC = 1

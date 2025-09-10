@@ -1,0 +1,244 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###############################################################################################################################
+#                          GESTORE APERTURA TABELLE e CONFIGURATORI GRIGLIE per SELEZIONI
+#                                           (Libreria contestuale al progetto)
+###############################################################################################################################
+
+#**
+#*Sub per apertura tabelle necessarie a creazione della Link (contestuale a Funzione & Campo sui cui fare la Selezione Custom)
+#*!
+
+$HANDLE_FILES
+
+  Case FUNCTION
+    When "ENT", "USC"
+
+      Case TYPE_FIELD
+        When "LOC"
+          If OPEN = 2
+            If clalev([F:YSTC])=0 : Local File STOLOC [YSTC] : Endif
+            If clalev([F:YITF])=0 : Local File ITMFACILIT [YITF] : Endif
+            If clalev([F:YFCY])=0 : Local File FACILITY [YFCY] : Endif
+          Endif
+        When "ITM"
+          #If OPEN = 2
+            If clalev([F:YITM])=0 : Local File ITMMASTER [YITM] : Endif
+            If clalev([F:YITG])=0 : Local File ITMCATEG [YITG] : Endif
+            If clalev([F:YITF])=0 : Local File ITMFACILIT [YITF] : Endif
+            If clalev([F:YSTO])=0 : Local File STOCK [YSTO] : Endif
+          #Endif
+        When "LOT"
+          If OPEN = 2
+            Local File STOLOT    [YSTL]
+            Local File STOLOTFCY [YSLF]
+          Endif
+
+        When Default
+      Endcase
+
+    When "YCSTK"
+
+      Case TYPE_FIELD
+        When "LOC","LOCD"
+          If OPEN = 2
+            If clalev([F:YSTC])=0 : Local File STOLOC [YSTC] : Endif
+            #If clalev([F:YITF])=0 : Local File ITMFACILIT [YITF] : Endif
+            If clalev([F:YFCY])=0 : Local File FACILITY [YFCY] : Endif
+            If clalev([F:YSTO])=0 : Local File STOCK [YSTO] : Endif
+          Endif
+        When "ITM"
+          #If OPEN = 2
+            If clalev([F:YSTO])=0 : Local File STOCK [YSTO] : Endif
+            If clalev([F:YITM])=0 : Local File ITMMASTER [YITM] : Endif
+            If clalev([F:YITG])=0 : Local File ITMCATEG [YITG] : Endif
+            If clalev([F:YITF])=0 : Local File ITMFACILIT [YITF] : Endif
+          #Endif
+        When "LOT"
+          If OPEN = 2
+            #Local File STOLOT    [YSTL]
+            #Local File STOLOTFCY [YSLF]
+            #Local File STOCK [YSTO]
+            Local File STOCK [LNK]
+
+            #Local File STOLOTFCY [LNK]
+          Endif
+
+        When "SER"
+          If OPEN = 2
+            If clalev([F:YSTS])=0 : Local File STOSER    [YSTS] : Endif
+            If clalev([F:YITM])=0 : Local File ITMMASTER [YITM] : Endif
+          Endif
+
+        When Default
+      Endcase
+
+    When "SOH"
+
+       Case TYPE_FIELD
+          When "TSO"
+            If OPEN = 2
+              Local File TABSOHTYP [YTSO]
+              Local File TABSDHTYP [YTSD]
+              Local File ATEXTRA [AXX]
+              Local File ATEXTRA [AX3]
+            Endif
+
+          When "ITM"
+            If OPEN = 2
+              Local File ITMMASTER [YITM]
+              Local File ITMFACILIT [YITF]
+            Endif
+
+          When Default
+       Endcase
+
+    When "YCGC1" #CONS
+       Case TYPE_FIELD
+          When "YCGC1" #YCALCGIAC
+          When "LOC"
+            If OPEN = 2
+               Local File FACILITY [YFCY]
+               Local File STOCK [YSTO]
+               Local File STOLOC [YSTC]
+            Endif
+          When Default
+       Endcase
+
+    When "YBPC","YVBPC"
+      Case TYPE_FIELD
+          When "BPAADD"
+            If OPEN = 2
+               Local File ATEXTRA [LNK]
+            Endif
+
+          When "POSCOD","CTY"  #Stessa SEL per CAP,Città
+            If OPEN = 2
+               Local File POSCOD [YPOS]
+               Local File TABCOUNTRY [YTCY]
+            Endif
+          When Default
+       Endcase
+
+    When "VXRUNI"
+      Case TYPE_FIELD
+          When "VCRNUM"
+            If OPEN = 2
+              Local File MFGWIP [YMFG]
+              Local File MFGHEAD[YMWH]
+            Endif
+          When Default
+       Endcase
+
+    When Default
+  Endcase
+
+Return
+
+###############################################################################################
+#**
+#*Sub per Configurazione della Griglia (contestuale a Funzione & campo su cui fare le Selezione Custom)
+#*!
+
+$CONFIG_GRID
+
+  #costante che definisce il numero di colonne della selezione custom
+  Const Shortint NUM_COLS
+
+  Case FUNCTION
+    When "ENT"  #ENTRATE DIVERSE
+      Case TYPE_FIELD
+
+        When "LOC"
+          Gosub LOC_ENT From YAX3MSELLOCLNK
+
+        When "ITM"
+          Gosub ITM_ENT From YAX3MSELITMLNK
+
+        When Default
+      Endcase
+
+    When "USC"  #USCITE DIVERSE
+      Case TYPE_FIELD
+
+        When "LOC"
+          Gosub LOC_USC From YAX3MSELLOCLNK
+
+        When "ITM"
+          Gosub ITM_USC From YAX3MSELITMLNK
+
+        When "LOT"
+          Gosub LOT_USC From YAX3MSELLOTLNK
+
+        When Default
+      Endcase
+
+    When "YCSTK"  #CAMBIO STOCK
+      Case TYPE_FIELD
+
+        When "LOC"
+          Gosub LOC_CSTK From YAX3MSELLOCLNK
+
+         When "LOCD"
+          Gosub LOCD_CSTK From YAX3MSELLOCLNK
+
+        When "ITM"
+          Gosub ITM_CSTK From YAX3MSELITMLNK
+
+        When "LOT"
+          Gosub LOT_CSTK From YAX3MSELLOTLNK
+
+        When "SER"
+          Gosub SER_CSTK From YAX3MSELSERLNK
+
+        When Default
+      Endcase
+
+    When "SOH"  #ORDINI DI VENDITA
+      Case TYPE_FIELD
+        When "TSO"
+          Gosub TSO_SOH From YAX3MSELTSOLNK
+
+        When "ITM"
+          Gosub ITM_SOH From YAX3MSELITMLNK
+
+        When Default
+      Endcase
+
+    When "YCGC1"  #CONS
+      Case TYPE_FIELD
+
+        When "YCGC1"  # Bottone di ricerca per Consultazione #YCALCGIAC
+          #Gosub READ_YCGC1 From YCALCGIAC
+          Gosub READ_YCALCGIAC From YAX3MSETCONS
+        When "LOC"
+          Gosub LOC_GC From YAX3MSELLOCLNK
+        When Default
+      Endcase
+
+     When "YBPC","YVBPC"  #Creaz Cliente
+      Case TYPE_FIELD
+
+        When "BPAADD"
+          Gosub BPAADD_BPC From YAX3MSELBPAADDLNK
+
+        When "POSCOD"
+          Gosub POSCOD_BPC From YAX3MSELPOSCODLNK
+
+        When "CTY"
+          Gosub CTY_BPC From YAX3MSELPOSCODLNK
+
+        When Default
+      Endcase
+
+     When "VXRUNI" #Inizio Produzione
+      Case TYPE_FIELD
+        When "VCRNUM"
+          #Gosub VCR_VXRUNI From YAX3MSELVCRLNK
+
+        When Default
+      Endcase
+
+    When Default
+  Endcase
+
+Return

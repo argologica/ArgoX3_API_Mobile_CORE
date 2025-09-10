@@ -10,6 +10,8 @@ $ACTION
 
 Return
 
+###############################################################################
+
 $INIT
 
   Local Char FUNCTION(5) : FUNCTION = "USC"
@@ -17,11 +19,13 @@ $INIT
 
 Return
 
+###############################################################################
+
 $SEL_TABLE
 
   Gosub INIT
   Local Shortint OPEN : OPEN = 2
-  Gosub HANDLE_FILES From YAX3MWSLIB
+  Gosub HANDLE_FILES From YAX3MSEL
 
   Case COUZON
     When "YSELITM" : Gosub S_YSELITM
@@ -29,22 +33,27 @@ $SEL_TABLE
 
 Return
 
+##############################################################################
+
 $S_YSELITM
 
   Gosub INIT
 
-  Local Char PARAMS(250)(1)
+  Local Char PARAMS(250)(2)
   PARAMS(0) = [M:YSMO1]FCY
+  PARAMS(1) = [M:YSMO1]ITMREF(nolign-1) #AGGIUNTO!
 
   Local Shortint IS_MOBILE : IS_MOBILE = 1
-  Gosub CONFIG_GRID From YAX3MWSLIB
+  Gosub CONFIG_GRID From YAX3MSEL
 
 Return
+
+##############################################################################
 
 $FIN
 
   Gosub INIT
   Local Shortint OPEN : OPEN = 1
-  Gosub HANDLE_FILES From YAX3MWSLIB
+  Gosub HANDLE_FILES From YAX3MSEL
 
 Return

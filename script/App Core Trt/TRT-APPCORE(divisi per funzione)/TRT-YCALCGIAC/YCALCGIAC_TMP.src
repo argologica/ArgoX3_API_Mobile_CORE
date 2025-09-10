@@ -1,0 +1,128 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# AZIONE-CAMPO - C - Controllo codice in anagrafica STOCK
+Subprog C_GIACYCOD(FCY, YCODICE, LOC, ITMREF, EANCOD, SERNUM, YLOC, LOT, STA, QTY, STU, YAX3MRESP, YRESPONSE)
+
+  Variable Char FCY
+  Variable Char YCODICE
+  Variable Char LOC
+  Variable Char ITMREF
+  Variable Char EANCOD
+  Variable Char SERNUM
+  Variable Char YLOC
+  Variable Char LOT
+  Variable Char STA
+  Variable Decimal QTY
+  Variable Char STU
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("C_GIACYCOD") From LECFIC
+
+  Local Char YWINNAME(20): YWINNAME = "YCALCGIAC"         #px3
+  Local Char YCURRMSK(20): YCURRMSK = "YCALCGIAC1"        #px3
+  Local Char YCURRMSKALIAS(20): YCURRMSKALIAS= "YCGC1"    #px3
+  Local Char YACTION(20): YACTION = "YCGIACYCOD"          #px3
+  Local Char YCURRFIELD(20): YCURRFIELD = "YCODICE"       #px3
+#
+Local Char YFILA(250) : YFILA=filpath("tmp","YAX3MRESP" + num$(int(rnd(10000))), "txt")
+Openo YFILA Using [YF2]
+Iomode adxifs ";" Using [YF2]
+Iomode adxium GUTF8 Using [YF2]
+Iomode adxirs chr$(13)+chr$(10) Using [YF2]
+Wrseq YAX3MRESP Using [YF2]
+Openo Using [YF2]
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS          #px3
+  #business logic
+  Local File STOCK [F:YSTO]
+  Local File ITMMASTER [F:YITM]
+
+  Link [YSTO] With [YITM]ITM0=[YSTO]ITMREF
+&                 As [LNK]
+  Columns [LNK] ([YSTO]ITMREF,[YITM]ITMDES1,[YITM]EANCOD,[YSTO]SERNUM)
+
+  Filter [LNK]  Where ([F:YSTO]ITMREF = YCODICE | [F:YITM]EANCOD = YCODICE | [F:YSTO]SERNUM = YCODICE)
+
+  #business logic start
+  If(rowcount([LNK]) > 0)
+    mkstat = 0
+  Else
+    mkstat = 2
+    YMESSAGE = "Il codice" - YCODICE - "non è presente in anagrafica!"
+    Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+  Endif
+  Filter [LNK]
+  #business logic end
+
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+YSUFF = "end"
+  Gosub YAX3MOB_PRINT_YFIELDS From YAX3MUTILS
+
+  Call FERME_TRACE From LECFIC
+End
+###########################################################################à
+
+
+$YAX3MOB_PRINT_YFIELDS
+
+  Local Integer XDIM : XDIM = func YUTILS.COUNT_MULTI(YFIELDS) - 1
+  Local Integer YDIM : YDIM = 9
+  Local Integer I, J
+
+  Gosub YSET_COLKEYS From YJSONDESERIALIZE
+
+  Local Char YFIL(250)
+  YFIL = filpath("tmp", "print_yfields_" +YACTION+"_"+YSUFF+"_"+num$(int(rnd(10000)))+"_"+date$, "json")
+  Openo YFIL Using [YF]
+  Iomode adxium GUTF8 Using [YF]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF]
+  Wrseq "xdim = " - num$(XDIM)- "ydim = "-num$(dim(YFIELDS,2)) Using [YF]
+
+  For I = 0 To XDIM
+    Wrseq "New item:"  Using [YF]
+    For J = 0 To YDIM
+      Wrseq num$(I) + "," + num$(J) - "-" - YCOL_KEYS(J) + ":" - YFIELDS(I,J) Using [YF]
+    Next J
+  Next
+  Openo Using [YF]
+
+Return
+
+###########################################################################################àà
+
+######################################################################################
+
+Subprog YPRINT(YTEXT)
+
+  Value Char YTEXT
+
+  Local Char YFIL(250)
+  YFIL = filpath("tmp", "Print_tmp2_"+num$(int(rnd(10000)))+"_"+date$, "txt")
+  Openo YFIL Using [YF]
+  Iomode adxium GUTF8 Using [YF]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF]
+
+  Wrseq YTEXT Using [YF]
+  Openo Using [YF]
+End
+
+#############################################################################################àà
+
+#################################################################################################
+############################ debug YJSONDESERIALIZE #############################################
+
+###############
+$PRINTCLB
+
+  Local Char YFILA(250) : YFILA=filpath("tmp","yclb" + num$(int(rnd(10000))), "txt")
+  Openo YFILA Using [YF2]
+  Iomode adxifs ";" Using [YF2]
+  Iomode adxium GUTF8 Using [YF2]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF2]
+  Wrseq YDOC Using [YF2]
+
+Return
+Openo Using [YF2]
+
+###########################################

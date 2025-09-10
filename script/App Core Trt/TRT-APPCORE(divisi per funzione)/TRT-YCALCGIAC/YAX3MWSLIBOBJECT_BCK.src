@@ -1,0 +1,126 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###############################################################################################################################
+#                              GESTORE APERTURA TABELLE e Creazione LINK per SELEZIONI AD OGGETTO
+#                                           (Libreria contestuale al progetto)
+###############################################################################################################################
+
+#NOTA: ad ogni nuovo oggetto di cui si ha bisogno, aggiungere un "When" con il suo codice e assegnare le tabelle associate
+# (si vedano i trt "WO_" o "WGO_")
+#**
+#*Sub per apertura tabelle e creazione LINK (contestualmente all'oggetto in esame) usate per la Selezione ad Oggetto
+#*!
+
+$GET_LINK
+
+  Case OBJECT
+    When "ITM"
+      If clalev([F:ITF])=0 : Local File ITMFACILIT [ITF] : Endif
+      If clalev([F:ITM])=0 : Local File ITMMASTER [ITM] : Endif
+      If clalev([F:ITS])=0 : Local File ITMSALES [ITS] : Endif
+      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
+      If clalev([F:AX3])=0 : Local File ATEXTRA [AX3] : Endif
+      If clalev([F:AX4])=0 : Local File ATEXTRA [AX4] : Endif
+
+      Gosub OUVFIC_LISTE From = "WO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+    When "FCY"
+      If clalev([F:CPY3])=0 : Local File COMPANY [CPY3] : Endif
+      If clalev([F:FCY])=0 : Local File FACILITY [FCY] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+    When "LOC"
+      If clalev([F:AFF])=0 : Local File AFCTFCY  [AFF] : Endif
+      If clalev([F:FGR])=0 : Local File FACGROUP [FGR] : Endif
+      If clalev([F:STC])=0 : Local File STOLOC [STC] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[STC_]"
+
+    When "TSO"
+      If clalev([F:TSO])=0 : Local File TABSOHTYP [TSO] : Endif
+      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
+      If clalev([F:AX3])=0 : Local File ATEXTRA [AX3] : Endif
+      If clalev([F:TSD])=0 : Local File TABSDHTYP [TSD] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+      # Aggiunto filtro su Categoria d'ordine a 1 (Normale) come da comportamento su funzione nativa ODV
+      Filter [F] Where [F]SOHCAT = 1
+
+    When "BPR"
+      If clalev([F:BPR])=0 : Local File BPARTNER [BPR] : Endif
+      If clalev([F:BPC])=0 : Local File BPCUSTOMER [BPC] : Endif
+      If clalev([F:BPS])=0 : Local File BPSUPPLIER [BPS] : Endif
+      If clalev([F:BPA])=0 : Local File BPADDRESS [BPA] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+    When "BCG"
+      If clalev([F:BCG])=0 : Local File BPCCATEG [BCG] : Endif
+      If clalev([F:TMD])=0 : Local File TABMODELIV [TMD] : Endif
+      If clalev([F:TCU])=0 : Local File TABCUR [TCU] : Endif
+      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
+      If clalev([F:AX3])=0 : Local File ATEXTRA [AX3] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+    When "SOH"
+      If clalev([F:SOH])=0 : Local File SORDER  [SOH] : Endif
+      If clalev([F:AFF])=0 : Local File AFCTFCY  [AFF] : Endif
+      If clalev([F:FGR])=0 : Local File FACGROUP [FGR] : Endif
+      If clalev([F:TSO])=0 : Local File TABSOHTYP [TSO] : Endif
+      If clalev([F:REP])=0 : Local File SALESREP [REP] : Endif
+      If clalev([F:TMD])=0 : Local File TABMODELIV [TMD] : Endif
+      If clalev([F:BPA])=0 : Local File BPADDRESS [BPA] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+    When "TCY"
+      If clalev([F:TCY])=0 : Local File TABCOUNTRY [TCY] : Endif
+      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
+      If clalev([F:AX3])=0 : Local File ATEXTRA [AX3] : Endif
+      If clalev([F:AX4])=0 : Local File ATEXTRA [AX4] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+    When "BPC"
+      If clalev([F:BPC])=0 : Local File BPCUSTOMER [BPC] : Endif
+      If clalev([F:BPA])=0 : Local File BPADDRESS [BPA] : Endif
+      If clalev([F:BPR])=0 : Local File BPARTNER [BPR] : Endif
+      If clalev([F:BCG])=0 : Local File BPCCATEG [BCG] : Endif
+      If clalev([F:REP])=0 : Local File SALESREP [REP] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+     When "TLP"
+      #Sel a oggetto: CFGLIN (Linea Produzione)
+      If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
+      If clalev([F:TLP])=0 : Local File TABLINCFG [TLP] : Endif
+
+      Gosub INIT_BOITE From  = "WGO" + OBJECT
+
+      Default File "[" + OBJECT + "_]"
+
+    When Default
+
+  Endcase
+
+Return

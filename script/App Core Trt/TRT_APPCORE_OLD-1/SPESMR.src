@@ -1,0 +1,17 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+  Case ACTION
+    When "APRES_CRE" : Gosub APRES_CRE
+    When Default
+  Endcase
+Return
+
+###################################################
+
+$APRES_CRE
+
+  If dim(GYVCRENT)>0
+    GYVCRENT = [M:SMR0]VCRNUM
+  Endif
+
+Return

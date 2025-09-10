@@ -1,0 +1,84 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+# Gestione Selezione BPAADD per Funzione ###################################################################################
+
+#YBPC
+$BPCNUM_BPC
+
+  Gosub SET_LINK_YBPC
+
+#Infbox "3 - RWCCNT = "- num$(rowcount([LNK]))
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_YBPC_FIELDS
+  Endif
+
+  Gosub SET_CRITERE_YBPC
+  Gosub SET_TITCOL_YBPC
+Return
+
+#########################################################################################à
+$SET_LINK_YBPC
+
+  Link [YBPC] With
+& [YBPA]BPA0=1;[F:YBPC]BPCNUM;[F:YBPC]BPAADD,
+& [YBPR]BPR0=[F:YBPC]BPCNUM,
+& [YBCG]BCG0=[F:YBPC]BCGCOD,
+& [YREP]REP0=[F:YBPC]REP
+& As [LNK]
+
+Return
+
+#####################################################################################
+$INIT_CRITERE_YBPC_FIELDS
+
+Return
+
+#######################################################################################
+
+$SET_CRITERE_YBPC
+
+  NUM_COLS = 2
+
+  If IS_MOBILE = 2
+    Gosub INIT_GRID
+    Filter [LNK] Where evalue(CRITERE)
+    COUNT_VALUES = rowcount([LNK])
+    FIELDS(0) = "BPCNUM" : FIELDS(1) = "BPCNAM"
+    NBCOL = 0
+  Else
+    GSELFAC = 1
+    TIT(0) = "Selezione Cliente"
+    ORDRE = "[F:YBPC]BPCNUM"
+    START = "[F:YBPC]BPCNUM"
+    DEFPAG = 1
+    NBCOL = 1
+
+    Local Char CRITERE(250)
+    CRITERE = "1=1"
+    If(vireblc(PARAMS(0),2)<> AVOID.ACHAR)
+      Local Char YBPCNUM(15): YBPCNUM = vireblc(PARAMS(0),2)
+      CRITERE-= "& instr(1, tolower([F:YBPC]BPCNUM), tolower('" + YBPCNUM + "'))<>0"
+    Endif
+  Endif
+Return
+
+################################################################################à
+
+$SET_TITCOL_YBPC
+
+  Default File [LNK]
+
+  #Imposto Colonne Lookup
+  Call TEXTFIC("BPCUSTOMER","BPCNUM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPC]BPCNUM"
+  NBCOL += 1 : Call TEXTFIC("BPCUSTOMER","BPCNAM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YBPC]BPCNAM"
+
+Return

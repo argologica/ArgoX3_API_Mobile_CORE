@@ -17,18 +17,27 @@
 #* @param QUERY
 #* @param RESPONSE
 #*!
-Subprog SEL_LOCENT(FCY, ITMREF, QUERY, RESPONSE)
+Subprog SEL_LOCENT(FCY, ITMREF, LOC, QUERY, RESPONSE)
 
   Value Char FCY
   Value Char ITMREF
+  Value Char LOC
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   #parametrizzazioni iniziali
-  Local Char FUNCTION(10) : FUNCTION = "USC"
+  Local Char FUNCTION(10) : FUNCTION = "ENT"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "LOC"
-  Local Char PARAMS(250)(1) :  PARAMS(0) = ITMREF
-  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YSTC]LOKSTA <> 2"
+  Local Char PARAMS(250)(3) :  PARAMS(0) = FCY : PARAMS(1) = ITMREF : PARAMS(2) = LOC
+
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YSTC]LOKSTA <> 2"
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + PARAMS(0) + "' & [F:YITF]ITMREF = '" + PARAMS(1) + "' & [F:YSTC]LOKSTA <> 2"
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YFCY]FCY = '" + PARAMS(0) + "' & [F:YSTC]LOKSTA <> 2"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(2),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YSTC]LOC), tolower('" + PARAMS(2) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
@@ -36,11 +45,14 @@ End
 
 #Selezione Articolo (ITMREF) per Entrate Diverse (ENT)
 
-Subprog SEL_ITMENT(FCY, QUERY, RESPONSE)
+Subprog SEL_ITMENT(FCY,ITMREF,QUERY, RESPONSE)
 
   Value Char FCY
+  Value Char ITMREF
   Value Char QUERY
   Variable Clbfile RESPONSE
+
+Call OUVRE_TRACE("SEL_ITMENT") From LECFIC
 
   #parametrizzazioni iniziali
   Local Char FUNCTION(10) : FUNCTION = "ENT"
@@ -48,73 +60,124 @@ Subprog SEL_ITMENT(FCY, QUERY, RESPONSE)
   Local Char PARAMS(250)(1) :  PARAMS(0) = FCY
   Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "'"
 
-  #array opzionale( solo in caso di selezione multicustom)(ATTENZIONE!: associato a subprg: SEL_MULTICUSTOM)
+  #Array opzionale( solo in caso di selezione multicustom)(ATTENZIONE!: associato a subprg: SEL_MULTICUSTOM)
   Local Char SELECTEDFIELDS(15)(2): SELECTEDFIELDS(0) = "SERNUM" : SELECTEDFIELDS(1) = "TCLCOD"
+
+Call ECR_TRACE("Itmref -SEL_ITMENT :" - FCY- "-"-ITMREF,0) From GESECRAN
+  #Filtro su campo stesso
+  If(vireblc(ITMREF,2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YITF]ITMREF), tolower('" + ITMREF + "'))<>0"
+  Endif
 
   #Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
   Call SEL_MULTICUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, SELECTEDFIELDS, RESPONSE) From YAX3MSEL
 
-
   Call YPRINT_CLB(RESPONSE, "RESPONSE_" + "selmulticustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
+Call FERME_TRACE From LECFIC
 
 End
 
 #================================================================= USCITE ====================================================================
 
-#Selezione Ubicazione (LOC) per Uscite Diverse (USC)
+#Selezione Cod.Articolo (ITMREF) per Uscite Diverse (USC)
+#QUI: in selezione valorizzo anche le matricole
 
-Subprog SEL_LOCUSC(FCY, ITMREF, QUERY, RESPONSE)
+Subprog SEL_ITMUSC(FCY,ITMREF, QUERY, RESPONSE)
 
   Value Char FCY
   Value Char ITMREF
   Value Char QUERY
   Variable Clbfile RESPONSE
 
-  #parametrizzazioni iniziali
-  Local Char FUNCTION(10) : FUNCTION = "USC"
-  Local Char TYPE_FIELD(5) : TYPE_FIELD = "LOC"
-  Local Char PARAMS(250)(1) :  PARAMS(0) = ITMREF
-  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YSTC]LOKSTA <> 2"
-
-  Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
-
-End
-
-#Selezione Cod.Articolo (ITMREF) per Uscite Diverse (USC)
-
-Subprog SEL_ITMUSC(FCY, QUERY, RESPONSE)
-
-  Value Char FCY
-  Value Char QUERY
-  Variable Clbfile RESPONSE
+Call OUVRE_TRACE("SEL_ITMUSC") From LECFIC
 
   Local Char FUNCTION(10) : FUNCTION = "USC"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "ITM"
-  Local Char PARAMS(250)(1) :  PARAMS(0) = FCY
+  Local Char PARAMS(250)(2) :  PARAMS(0) = FCY : PARAMS(1) = ITMREF
   Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "'"
 
+  #Array opzionale( solo in caso di selezione multicustom)(ATTENZIONE!: associato a subprg: SEL_MULTICUSTOM)
+  Local Char SELECTEDFIELDS(15)(1): SELECTEDFIELDS(0) = "SERNUM"
+
+Call ECR_TRACE("params (sel_itmusc) :"-PARAMS(0)-"-"-PARAMS(1),0) From GESECRAN
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+  #If(vireblc(ITMREF,2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YSTO]ITMREF), tolower('" + PARAMS(1) + "'))<>0"
+    #CRITERE(0)-= "& instr(1, tolower([F:YSTO]ITMREF), tolower('" + ITMREF + "'))<>0"
+  Endif
+
+  #Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
+  Call SEL_MULTICUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, SELECTEDFIELDS, RESPONSE) From YAX3MSEL
+  #Call YPRINT_CLB(RESPONSE, "RESPONSE_" + "selmulticustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
+
+
+Call FERME_TRACE From LECFIC
+End
+
+#Selezione Ubicazione (LOC) per Uscite Diverse (USC)
+Subprog SEL_LOCUSC(FCY, ITMREF, LOC, QUERY, RESPONSE)
+
+  Value Char FCY
+  Value Char ITMREF
+  Value Char LOC
+  Value Char QUERY
+  Variable Clbfile RESPONSE
+
+Call OUVRE_TRACE("SEL_LOCUSC") From LECFIC
+Call ECR_TRACE("QUI",0) From GESECRAN
+
+  #parametrizzazioni iniziali
+  Local Char FUNCTION(10) : FUNCTION = "USC"
+  Local Char TYPE_FIELD(5) : TYPE_FIELD = "LOC"
+  Local Char PARAMS(250)(3) :  PARAMS(0) = FCY : PARAMS(1) = ITMREF : PARAMS(2) = LOC
+
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YSTC]LOKSTA <> 2"
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + PARAMS(0) + "' & [F:YITF]ITMREF = '" + PARAMS(1) + "' & [F:YSTC]LOKSTA <> 2"
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YFCY]FCY = '" + PARAMS(0) + "' & [F:YSTO]ITMREF = '" + PARAMS(1) + "'"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(2),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YSTO]LOC), tolower('" + PARAMS(2) + "'))<>0"
+  Endif
+
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
+
+Call FERME_TRACE From LECFIC
 
 End
 
 #Selezione Lotto (LOT) per Uscite Diverse (USC)
 
-Subprog SEL_LOTUSC(FCY, ITMREF, QUERY, RESPONSE)
+Subprog SEL_LOTUSC(FCY,ITMREF,LOT,QUERY,RESPONSE)
+
   Value Char FCY
   Value Char ITMREF
+  Value Char LOT
   Value Char QUERY
   Variable Clbfile RESPONSE
 
+Call OUVRE_TRACE("SEL_LOTUSC") From LECFIC
+
   Local Char FUNCTION(10) : FUNCTION = "USC"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "LOT"
-  Local Char PARAMS(250)(1) :  PARAMS(0) = ITMREF
+  Local Char PARAMS(250)(3) :  PARAMS(0) = FCY :  PARAMS(1) = ITMREF :  PARAMS(2) = LOT
   #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "' & [F:YITF]ITMREF = '" + ITMREF + "' & [F:YITM]LOTMGTCOD > 2"
-  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSLF]STOFCY = '" + FCY + "' & [F:YSLF]ITMREF = '" + ITMREF + "'"
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSLF]STOFCY = '" + FCY + "' & [F:YSLF]ITMREF = '" + ITMREF + "'"
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSLF]STOFCY = '" + PARAMS(0) + "' & [F:YSLF]ITMREF = '" + PARAMS(1) + "'"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(2),2)<> AVOID.ACHAR)
+Call ECR_TRACE("entro qui , param(2):" -PARAMS(2),0)From GESECRAN
+    CRITERE(0)-= "& instr(1, tolower([F:YSLF]LOT), tolower('" + PARAMS(2) + "'))<>0"
+  Endif
+
+Call ECR_TRACE("CRITERE :" -CRITERE(0),0) From GESECRAN
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
-
+Call FERME_TRACE From LECFIC
 End
-
 
 ###########TEMPORANEA
 Subprog SEL_MULTILOTUSC(FCY, ITMREF, QUERY, SELECTIONFIELDS, RESPONSE)
@@ -138,56 +201,173 @@ End
 
 #Selezione Tipo Ordine (SOHTYP) per OdV
 
-Subprog SEL_TSOSOH(QUERY, RESPONSE)
+Subprog SEL_TSOSOH(SOHTYP,QUERY, RESPONSE)
+
+  Value Char SOHTYP
   Value Char QUERY
   Variable Clbfile RESPONSE
 
+Call OUVRE_TRACE("SEL_TSOSOH") From LECFIC
+
   Local Char FUNCTION(10) : FUNCTION = "SOH"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "TSO"
-  Local Char PARAMS(250)(1)
-  Local Char CRITERE(250)(1)
+  Local Char PARAMS(250)(1): PARAMS(0) = SOHTYP
+  Local Char CRITERE(250)(1) : CRITERE(0) = "1=1"
+
+Call ECR_TRACE("SOHTYP :" -SOHTYP-"- params(0):"-PARAMS(0),0) From GESECRAN
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(0),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YTSO]SOHTYP), tolower('" + vireblc(PARAMS(0),4) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
+Call FERME_TRACE From LECFIC
 End
 
 #Selezione Cod.Articolo (ITMREF) per Ordini di Vendita
 
-Subprog SEL_ITMSOH(FCY, QUERY, RESPONSE)
+Subprog SEL_ITMSOH(FCY,ITMREF,QUERY, RESPONSE)
 
   Value Char FCY
+  Value Char ITMREF
   Value Char QUERY
   Variable Clbfile RESPONSE
 
+Call OUVRE_TRACE("SEL_ITMSOH") From LECFIC
+
   Local Char FUNCTION(10) : FUNCTION = "SOH"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "ITM"
-  Local Char PARAMS(250)(1) :  PARAMS(0) = FCY
-  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "'"
+  Local Char PARAMS(250)(2) :  PARAMS(0) = FCY : PARAMS(1) = ITMREF
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + FCY + "'"
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YITF]STOFCY = '" + PARAMS(0) + "'"
+
+Call ECR_TRACE ("FCY :"-PARAMS(0)-";"-"ITMREF :"-PARAMS(1),0) From GESECRAN
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YITM]ITMREF), tolower('" + vireblc(PARAMS(1),4) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
+Call FERME_TRACE From LECFIC
 End
 
 #====================================================== CALCOLO GIACENZE ====================================================================
 
 #Selezione Ubicazione (LOC) per Calcolo Giacenze
 
-Subprog SEL_LOCGC(FCY, QUERY, RESPONSE)
+Subprog SEL_LOCGC(FCY, LOC, QUERY, RESPONSE)
 
   Value Char FCY
+  Value Char LOC
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YCGC1"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "LOC"
-  Local Char PARAMS(250)(1)
-  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTO]STOFCY = '" + FCY  + "' & [F:YSTC]LOKSTA <> 2"
+  Local Char PARAMS(250)(2): PARAMS(0) = FCY : PARAMS(1) = LOC
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTO]STOFCY = '" + FCY  + "' & [F:YSTC]LOKSTA <> 2"
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTO]STOFCY = '" + PARAMS(0)  + "' & [F:YSTC]LOKSTA <> 2"
+
+  If(vireblc(ITMREF,2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YSTC]ITMREF), tolower('" + PARAMS(1) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
 End
 
 #============================================= YBPC-CREAZIONE CLIENTI =======================================================
+
+#Selezione Cliente[deprecato]
+
+Subprog SEL_BPCBPC(BCGCOD, BPCNUM, QUERY, RESPONSE)
+
+  Value Char BCGCOD
+  Value Char BPCNUM
+  Value Char QUERY
+  Variable Clbfile RESPONSE
+
+  Local Char FUNCTION(10) : FUNCTION = "YBPC"
+  Local Char TYPE_FIELD(6) : TYPE_FIELD = "BPCNUM"
+  Local Char PARAMS(250)(2): PARAMS(0) = BCGCOD : PARAMS(1) = BPCNUM
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YBPC]BCGCOD = '" + PARAMS(0) + "'"  #"1=1"
+
+  If(vireblc(BPCNUM,2)<> AVOID.ACHAR)
+    Local Char YBPCNUM(15): YBPCNUM = func YAX3MCRMLIB.YVALIDATEBPC(PARAMS(1))       #YBPCNUM = vireblc(BPCNUM,2)
+    CRITERE(0)-= "& instr(1, tolower([F:YBPC]BPCNUM), tolower('" + YBPCNUM + "'))<>0"
+  Endif
+
+  Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
+End
+
+#Sel VACBPR ( Regime IVA)
+
+Subprog SEL_VACBPC(VACBPR,QUERY, RESPONSE)
+
+  Value Char VACBPR
+  Value Char QUERY
+  Variable Clbfile RESPONSE
+
+  Local Char FUNCTION(10) : FUNCTION = "YBPC"
+  Local Char TYPE_FIELD(6) : TYPE_FIELD = "VACBPR"
+  Local Char PARAMS(250)(1): PARAMS(0) = "ITA"
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:LNK]LEG = '" + PARAMS(0) + "'"
+
+  If(vireblc(VACBPR,2)<> AVOID.ACHAR)
+    Local Char YVACBPR(5): YVACBPR = vireblc(VACBPR,2)
+    CRITERE(0)-= "& instr(1, tolower([F:LNK]VACBPR), tolower('" + YVACBPR + "'))<>0"
+  Endif
+
+  Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
+End
+
+#Selezione PTE: Cond. pagamento
+
+Subprog SEL_PTEBPC(PTE,QUERY, RESPONSE)
+
+  Value Char PTE
+  Value Char QUERY
+  Variable Clbfile RESPONSE
+
+  Local Char FUNCTION(10) : FUNCTION = "YBPC"
+  Local Char TYPE_FIELD(6) : TYPE_FIELD = "PTE"
+  Local Char PARAMS(250)(3): PARAMS(0) = "ITA" : PARAMS(1)= num$(1)
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:LNK]LEG = '" + PARAMS(0) + "'"#-"& [F:LNK]PTELIN ="+PARAMS(1)
+
+  If(vireblc(PTE,2)<> AVOID.ACHAR)
+    Local Char YPTE(5): YPTE = vireblc(PTE,2)
+    CRITERE(0)-= "& instr(1, tolower([F:LNK]PTE), tolower('" + YPTE + "'))<>0"
+  Endif
+
+  Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
+End
+
+#Selezione ACCCOD: Cod contabile
+
+Subprog SEL_ACCBPC(ACCCOD,QUERY, RESPONSE)
+
+  Value Char ACCCOD
+  Value Char QUERY
+  Variable Clbfile RESPONSE
+
+  Local Char FUNCTION(10) : FUNCTION = "YBPC"
+  Local Char TYPE_FIELD(6) : TYPE_FIELD = "ACCCOD"
+  Local Char PARAMS(250)(1): PARAMS(0) = "ITA"
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "[F:LNK]COA = '" + PARAMS(0) + "'"
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:LNK]COA = '" + PARAMS(0) + "'"-"& [F:LNK]TYPCAR ="+"'3'"
+
+  If(vireblc(ACCCOD,2)<> AVOID.ACHAR)
+    Local Char YACCCOD(10): YACCCOD = vireblc(ACCCOD,2)
+    CRITERE(0)-= "& instr(1, tolower([F:LNK]ACCCOD), tolower('" + YACCCOD + "'))<>0"
+  Endif
+
+  Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
+End
+
 #Selezione Tipologia Indirizzi (BPAADD)
 
 Subprog SEL_BADBPC(QUERY, RESPONSE)
@@ -206,16 +386,24 @@ End
 
 #Selezione Cap(POSCOD)
 
-Subprog SEL_PCDBPC(CRY,QUERY, RESPONSE)
+Subprog SEL_PCDBPC(CRY,POSCOD,QUERY, RESPONSE)
 
   Value Char CRY
+  Value Char POSCOD
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YBPC"
   Local Char TYPE_FIELD(6) : TYPE_FIELD = "POSCOD"
-  Local Char PARAMS(250)(1): PARAMS(0) = CRY
-  Local Char CRITERE(250)(1) : CRITERE(0) = "1=1"
+  Local Char PARAMS(250)(2): PARAMS(0) = CRY : PARAMS(1) = POSCOD
+
+  #Local Char CRITERE(250)(1) : CRITERE(0) = "1=1"
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YPOS]CRY = '" + PARAMS(0) + "'"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YPOS]POSCOD), tolower('" + PARAMS(1) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
@@ -223,31 +411,43 @@ End
 
 #Selezione Città (CTY)
 
-Subprog SEL_CTYBPC(CRY,QUERY, RESPONSE)
+Subprog SEL_CTYBPC(CRY,CTY,QUERY, RESPONSE)
 
   Value Char CRY
+  Value Char CTY
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YBPC"
   Local Char TYPE_FIELD(6) : TYPE_FIELD = "CTY"
-  Local Char PARAMS(250)(1): PARAMS(0) = CRY
+  Local Char PARAMS(250)(2): PARAMS(0) = CRY : PARAMS(1) = CTY
   Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YPOS]CRY = '" + PARAMS(0) + "'"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YPOS]CTY), tolower('" + PARAMS(1) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
 End
 
 #========================================= YVBPC - RICERCA CLIENTI (CONS) ====================================================
-Subprog SEL_BDVBPC(QUERY, RESPONSE)
+Subprog SEL_BDVBPC(BPAADD,QUERY, RESPONSE)
 
+  Value Char BPAADD
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YVBPC"
   Local Char TYPE_FIELD(6) : TYPE_FIELD = "BPAADD"
-  Local Char PARAMS(250)(1)
+  Local Char PARAMS(250)(1): PARAMS(0) = BPAADD
   Local Char CRITERE(250)(1) : CRITERE(0) = "1=1"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(0),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:LNK]BPAADD), tolower('" + PARAMS(0) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
@@ -255,16 +455,17 @@ End
 
 #======================================= YCSTK - CAMBIO STOCK =================================================================
 
-#Selezione Tipo Movimento (per X3 : YAX3MSELSGHCSTK)
-Subprog SEL_SGHSTK(FCY,QUERY,RESPONSE)
+#Selezione Tipo Movimento(Cod.campo : SGHTYP) (per X3 : YAX3MSELSGHCSTK)[Non utilizzata]
+Subprog SEL_SGHSTK(FCY,SGHTYP,QUERY,RESPONSE)
 
   Value Char FCY
+  Value Char SGHTYP
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YCSTK"
   Local Char TYPE_FIELD(6) : TYPE_FIELD = "SGHTYP"
-  Local Char PARAMS(250)(1): PARAMS(0) = FCY
+  Local Char PARAMS(250)(2): PARAMS(0) = FCY : PARAMS(1) =  SGHTYP
   Local Char CRITERE(250)(1) : CRITERE(0) = "1=1"
 #TODO: compila Critere
 
@@ -272,70 +473,92 @@ Subprog SEL_SGHSTK(FCY,QUERY,RESPONSE)
 
 End
 
-#Selezione LOC Destinazione  (per X3 : YAX3MSELLOCCSTK)
+#Selezione LOC Destinazione (Cod.campo : YLOCDEST) (per X3 : YAX3MSELLOCCSTK)
 
-Subprog SEL_LCDSTK(FCY,QUERY,RESPONSE)
+Subprog SEL_LCDSTK(FCY,YLOCDEST,QUERY,RESPONSE)
 
   Value Char FCY
+  Value Char YLOCDEST
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YCSTK"
   Local Char TYPE_FIELD(6) : TYPE_FIELD = "LOCD"
-  Local Char PARAMS(250)(1): PARAMS(0) = FCY
-  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTC]STOFCY = '" + PARAMS(0) + "' & [F:YSTC]LOKSTA <> 2"
+  Local Char PARAMS(250)(2): PARAMS(0) = FCY : PARAMS(1) = YLOCDEST
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTC]STOFCY = '" + PARAMS(0) + "' & [F:YSTC]LOKSTA <> 2 & [F:YSTC]OCPCOD <> 3"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YSTC]LOC), tolower('" + PARAMS(1) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
 End
 
-#Selezione LOC Origine (per X3 : YAX3MSELLOCCSTK)
+#Selezione LOC Origine (Cod.campo: LOC) (per X3 : YAX3MSELLOCCSTK)
 
-Subprog SEL_LOCSTK(FCY,QUERY,RESPONSE)
+Subprog SEL_LOCSTK(FCY,LOC,QUERY,RESPONSE)
 
   Value Char FCY
+  Value Char LOC
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YCSTK"
   Local Char TYPE_FIELD(6) : TYPE_FIELD = "LOC"
-  Local Char PARAMS(250)(1): PARAMS(0) = FCY
-  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTC]STOFCY = '" + PARAMS(0) + "' & [F:YSTC]LOKSTA <> 2"
+  Local Char PARAMS(250)(2): PARAMS(0) = FCY : PARAMS(1) = LOC
+  Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTC]STOFCY = '" + PARAMS(0) + "' & [F:YSTC]LOKSTA <> 2 & [F:YSTC]OCPCOD <> 1"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(1),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YSTC]LOC), tolower('" + PARAMS(1) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
 End
 
-#Selezione Articolo (per X3 : YAX3MSELITMCSTK)
-Subprog SEL_ITMSTK(FCY, LOC, QUERY, RESPONSE)
+#Selezione Articolo (Cod.campo: ITMREF) (per X3 : YAX3MSELITMCSTK)
+Subprog SEL_ITMSTK(FCY, LOC, ITMREF,QUERY, RESPONSE)
 
   Value Char FCY
   Value Char LOC
+  Value Char ITMREF
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YCSTK"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "ITM"
-  Local Char PARAMS(250)(2) :  PARAMS(0) = FCY : PARAMS(1) = LOC
+  Local Char PARAMS(250)(3) :  PARAMS(0) = FCY : PARAMS(1) = LOC : PARAMS(2) = ITMREF
   Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTO]STOFCY = '" + PARAMS(0) + "' & [F:YSTO]LOC = '" + PARAMS(1) + "'"
 
-  Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
+  #Array opzionale( solo in caso di selezione multicustom)(ATTENZIONE!: associato a subprg: SEL_MULTICUSTOM)
+  Local Char SELECTEDFIELDS(25)(4): SELECTEDFIELDS(0) = "LOT" : SELECTEDFIELDS(1) = "PCUSTUCOE" : SELECTEDFIELDS(2) = "SERNUM": SELECTEDFIELDS(3) = "STA"
 
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(2),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YSTO]ITMREF), tolower('" + PARAMS(2) + "'))<>0"
+  Endif
+
+  #Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
+  Call SEL_MULTICUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, SELECTEDFIELDS, RESPONSE) From YAX3MSEL
 End
 
-#Selezione Lotto  (per X3 : YAX3MSELLOTCSTK)
+#Selezione Lotto (Cod.campo: LOT)(per X3 : YAX3MSELLOTCSTK)
 
-Subprog SEL_LOTSTK(FCY, ITMREF,LOC, QUERY, RESPONSE)
+Subprog SEL_LOTSTK(FCY,ITMREF,LOC,LOT,QUERY, RESPONSE)
 
   Value Char FCY
   Value Char ITMREF
   Value Char LOC
+  Value Char LOT
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YCSTK"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "LOT"
-  Local Char PARAMS(250)(3) :  PARAMS(0) = FCY : PARAMS(1)= ITMREF : PARAMS(2) = LOC
+  Local Char PARAMS(250)(4) :  PARAMS(0) = FCY : PARAMS(1)= ITMREF : PARAMS(2) = LOC : PARAMS(3) = LOT
   Local Char CRITERE(250)(1)
 
   CRITERE(0) = "[F:LNK]ITMREF='"+PARAMS(1)+"'"
@@ -344,22 +567,33 @@ Subprog SEL_LOTSTK(FCY, ITMREF,LOC, QUERY, RESPONSE)
   CRITERE(0) -= "& [F:LNK]LOC='"+PARAMS(2)+"'"
   CRITERE(0) -= "& [F:LNK]QTYSTU - [LNK]CUMALLQTY - [LNK]CUMWIPQTY >0"
 
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(3),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:LNK]LOT), tolower('" + PARAMS(3) + "'))<>0"
+  Endif
+
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 
 End
 
-#Selezione Matricola (per X3 : YAX3MSELSERCSTK)
-Subprog SEL_SERSTK(FCY, ITMREF, QUERY, RESPONSE)
+#Selezione Matricola (Cod.campo: SERNUM)(per X3 : YAX3MSELSERCSTK)
+Subprog SEL_SERSTK(FCY, ITMREF,SERNUM ,QUERY, RESPONSE)
 
   Value Char FCY
   Value Char ITMREF
+  Value Char SERNUM
   Value Char QUERY
   Variable Clbfile RESPONSE
 
   Local Char FUNCTION(10) : FUNCTION = "YCSTK"
   Local Char TYPE_FIELD(5) : TYPE_FIELD = "SER"
-  Local Char PARAMS(250)(1) :  PARAMS(0) = FCY : PARAMS(1)= ITMREF
+  Local Char PARAMS(250)(3) :  PARAMS(0) = FCY : PARAMS(1)= ITMREF : PARAMS(2) = SERNUM
   Local Char CRITERE(250)(1) : CRITERE(0) = "[F:YSTS]STOFCY = '" + PARAMS(0) + "' & [F:YSTS]ITMREF = '" + PARAMS(1) + "'"
+
+  #Filtro su campo stesso
+  If(vireblc(PARAMS(2),2)<> AVOID.ACHAR)
+    CRITERE(0)-= "& instr(1, tolower([F:YSTS]SERNUM), tolower('" + PARAMS(2) + "'))<>0"
+  Endif
 
   Call SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE) From YAX3MSEL
 

@@ -1,0 +1,496 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###################################################################################################################################
+#                                                   LIBRERIA PER SELEZIONI/CONSULTAZIONI (AX3M)
+###################################################################################################################################
+
+#**
+#* Subprog per Selezione Custom con valorizzazione Multi-Campo per MOBILE
+#*
+#* @param FUNCTION Funzione utilizzata
+#* @param TYPE_FIELD Tipo del Campo
+#* @param PARAMS Parametri per Critere
+#* @param CRITERE Array per Critere
+#* @param QUERY stringa per ricerca in "OR" nel Record set ottenuto da Critere
+#* @param SELECTEDFIELDS Array con elenco dei campi da valorizzare in Selezione (MOD. Selezione con valorizzazione multi-campo)
+#* @param RESPONSE Clob di riposta per Grid
+#*!
+
+Subprog SEL_MULTICUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, SELECTEDFIELDS, RESPONSE)
+
+  Value Char FUNCTION
+  Value Char TYPE_FIELD
+  Value Char PARAMS()
+  Value Char CRITERE()
+  Value Char QUERY
+  Value Char SELECTEDFIELDS()()
+  Variable Clbfile RESPONSE
+
+  Gosub SEL_BASECUSTOM
+End
+
+###############################################################################################
+#**
+#* Subprog per Selezione Custom Campo per MOBILE
+#*
+#* @param FUNCTION Funzione utilizzata
+#* @param TYPE_FIELD Tipo del Campo
+#* @param PARAMS Parametri per Critere
+#* @param CRITERE Array per Critere
+#* @param QUERY stringa per ricerca in "OR" nel Record set ottenuto da Critere
+#* @param RESPONSE Clob di riposta per Grid
+#*!
+
+Subprog SEL_CUSTOM(FUNCTION, TYPE_FIELD, PARAMS, CRITERE, QUERY, RESPONSE)
+
+  Value Char FUNCTION
+  Value Char TYPE_FIELD
+  Value Char PARAMS()
+  Value Char CRITERE()
+  Value Char QUERY
+  Variable Clbfile RESPONSE
+
+  Local Char SELECTEDFIELDS(0)(1) #inizializzato array per selez multi-campo
+  Gosub SEL_BASECUSTOM
+End
+
+###################################################################################################
+#**
+#* Sub per Selezione Custom :
+#* Richiamata in modalità: selez mono-campo(classica)(SEL_CUSTOM); selez multi-campo (SEL_MULTICUSTOM)
+#*!
+
+$SEL_BASECUSTOM
+
+#Call OUVRE_TRACE("SEL_BASECUSTOM-"-FUNCTION-"-"-TYPE_FIELD) From LECFIC
+
+  #Logging
+  Local Char YLOGDIRNAME(20): YLOGDIRNAME = "ArgoX3Mobile_Log"
+
+  #modalità mobile
+  Local Shortint IS_MOBILE : IS_MOBILE = 2
+
+  #apertura file
+  Local Shortint OPEN : OPEN = 2
+  Local Shortint COUNT_VALUES # viene settata in confgrd con la rowcount della link
+
+  Gosub HANDLE_FILES
+  Gosub CONFIG_GRID
+
+  Local Char HEADER(250)( NUM_COLS, 2 )
+
+  Local Char VALUES(250)( COUNT_VALUES, NUM_COLS )
+
+  #Vengono settati gli array HEADER e VALUES necessari per la serializzazione del JSON
+  Gosub SET_HEADERVALUES
+
+  #chiusura file
+  OPEN = 1
+  Gosub HANDLE_FILES
+
+  Gosub QUERY_FILTER
+
+  Local Char EMPTY_FIELDS(0)(0..1,0..1)
+  Local Char ALERT_WS(0)(0..1,0..1)
+  Local Char YOPENFUNCTION(250)(4)
+
+  #caso in cui è stata inserita una query da mobile, se il count sul filtro è maggiore di 0 printiamo i filtrati su json
+  If(COUNT_CUSTOM > 0)
+    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION ,EMPTY_FIELDS, HEADER, FILTERED_VALUES, SELECTEDFIELDS)
+
+  #caso in cui NON c'è query, printiamo l'oggetto complessivo su json
+  Elsif(COUNT_VALUES > 0 & vireblc(QUERY, 2) = AVOID.ACHAR)
+
+    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,EMPTY_FIELDS, HEADER, VALUES, SELECTEDFIELDS)
+
+  #caso in cui non ci sono dati di output
+  Else
+    Local Char FIELDS(0)(1,1)
+    Local Char HEADER(0)(1,1)
+    Local Char DATA(0)(1,1)
+
+    RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "error", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA, SELECTEDFIELDS)
+
+  Endif
+
+  #log-SEL_custom
+  #Call YPRINT_DIR_CLB(YLOGDIRNAME,RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
+  #Call YPRINT_CLB(RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
+
+  #END_SELCUSTOM_LOG
+  Gosub YAX3MOB_SET_ENV From YAX3MLOG
+  Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, RESPONSE, "RESPONSE_" + "selcustom_"+FUNCTION+"_"+TYPE_FIELD, "json") From YUTILS
+
+#Call FERME_TRACE From LECFIC
+
+Return
+
+##############################################################################################################################################
+#**
+#* Subprog per Selezione ad Oggetto MOBILE
+#*
+#* @param OBJECT Codice Oggetto in esame
+#* @param QUERY stringa per ricerca in "OR" nel Record set ottenuto da Critere
+#* @param RESPONSE Clob di riposta per Grid
+#*!
+
+Subprog SEL_OBJ(OBJECT, QUERY, RESPONSE)
+  Value Char OBJECT
+  Value Char QUERY
+  Variable Clbfile RESPONSE
+
+ Call OUVRE_TRACE("SEL_OBJ-"-OBJECT) From LECFIC
+
+  If GWEBSERV
+
+    #Apertura File
+    Local File ATABZON [ATZ]
+    Local File ATEXTE [ATE]
+    Local File ATEXTE [YATE]
+    Local File AOBJET [AOB]
+    Local File AOBJLST [AOL]
+    Local File ATABLE [ATB]
+
+    Local Char TEXTE(5) : TEXTE = "TEXTE"
+    Local Char YLOGDIRNAME(20): YLOGDIRNAME = "ArgoX3Mobile_Log"
+
+    Read [F:AOB]ABREV=OBJECT
+
+    Local Char HEADERCRITERE(250)
+    HEADERCRITERE = "[F:ATZ]CODFIC = [F:AOB]NOMFIC"
+    HEADERCRITERE -= "& find([F:ATZ]CODZONE, [F:AOL]SELZON)"
+    Link [ATZ] With [F:ATE]NUMERO~=GLANGUE;[F:ATZ]NOLONG
+&                  ,[F:ATB]CODFIC~=[F:ATZ]CODFIC
+&                  ,[F:AOL]AOL0~= OBJECT As [LNK1]
+&              Where evalue(HEADERCRITERE)
+
+    Columns [LNK1] ([F:ATZ]CODZONE, [F:AOL]SELZON, [F:AOL]SELEXP, [F:AOL]SELINT, [F:AOL]SELTYP, [F:AOL]SELFIC, [F:ATE]TEXTE)
+    Filter [LNK1] Where evalue(HEADERCRITERE)
+
+    Gosub GET_LINK
+    Local Shortint INDEX_HEADER : INDEX_HEADER = 0
+    Local Shortint INDEX_CUSTOM : INDEX_CUSTOM = 0
+    Local Shortint INDEX_VALUES
+
+    Read [LNK1]NUMLIG First
+
+    Local Integer NUM_COLS : NUM_COLS = func COUNT_ITEMS([F:AOL]SELEXP, [F:AOL]SELZON)
+    Local Char HEADER(250)( NUM_COLS, 2 )
+    Local Char VARS(30)(NUM_COLS), COLS(30)(NUM_COLS)
+    Local Char CRITERE_CUSTOM(250)(0..NUM_COLS)
+    Local Clbfile CRITERE(1)
+
+    #nuova parte per filtro con query in like
+    If(vireblc(QUERY, 2) <> '')
+      CRITERE = "("
+      For [LNK1]
+        If([F:AOL]SELEXP(INDEX_HEADER) <> AVOID.ACHAR)
+          CRITERE_CUSTOM(INDEX_CUSTOM) = evalue([F:AOL]SELEXP)
+          INDEX_CUSTOM += 1
+        Elsif([F:AOL]SELZON(INDEX_HEADER) <> AVOID.ACHAR)
+          COLS(INDEX_HEADER) = "[F]" + [F:ATZ]CODZONE
+          VARS(INDEX_HEADER) = [F:ATZ]CODZONE
+          CRITERE += "lower(" + VARS(INDEX_HEADER) + ") like lower('%" + QUERY + "%')"
+          If INDEX_HEADER < rowcount([LNK1]) - 1
+            CRITERE -= "or "
+          Endif
+        Endif
+        INDEX_HEADER+=1
+      Next
+      CRITERE += ")"
+      INDEX_HEADER = 0
+    Endif
+
+    Local Shortint COUNT_VALUES : COUNT_VALUES = rowcount([F])
+    Local Shortint COUNT_LNK : COUNT_LNK = rowcount([LNK1])
+    Local Char VALUES(250)( COUNT_VALUES, NUM_COLS )
+    Local Char JVALUE(250)
+    Local Char CUSTOM_HEADER(250)
+    Local Char SELZON_MESS(250)
+    Local Char SELZON_VAL(250)
+    Local Char SELZON_CURRENT(25)
+
+    Read [LNK1] First
+
+    For INDEX_HEADER = 0 To dim([F:AOL]SELZON) - 1
+      SELZON_CURRENT = [F:AOL]SELZON(INDEX_HEADER)
+      If(SELZON_CURRENT <> AVOID.ACHAR)
+        If SELZON_CURRENT = TEXTE
+          Read [YATE]NUMERO=GLANGUE;[F:AOL]SELINT(INDEX_HEADER)
+          HEADER(INDEX_HEADER, 1) = [F:YATE]TEXTE
+          CUSTOM_HEADER = [F:AOL]SELZON(INDEX_HEADER - 1) + vireblc(HEADER(INDEX_HEADER, 1), 4)
+          HEADER(INDEX_HEADER, 0) = CUSTOM_HEADER
+        Else
+          HEADER(INDEX_HEADER, 0) = SELZON_CURRENT
+          Call TEXTFIC([F:AOL]SELFIC(INDEX_HEADER),HEADER(INDEX_HEADER, 0),2,HEADER(INDEX_HEADER, 1)) From OBJDIV
+        Endif
+        INDEX_VALUES = 0
+        For [F]
+          If SELZON_CURRENT = TEXTE #RIMUOVERE e capire come gestirlo
+            JVALUE = func AFNC.TEXTRA([F:AOL]SELFIC(INDEX_HEADER - 1), "DESAXX", num$(evalue("[F]" + [F:AOL]SELZON(INDEX_HEADER - 1))),"")
+            VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(CUSTOM_HEADER, JVALUE, 1)
+            INDEX_VALUES+=1
+          Else
+            If evalue("type([F]" + SELZON_CURRENT +")") >=0
+              SELZON_VAL = num$(evalue("[F]" + SELZON_CURRENT))
+            Else
+              SELZON_VAL = AVOID.ACHAR
+            Endif
+            SELZON_MESS = func YUTILS.GET_MESS(SELZON_VAL, [F:AOL]SELFIC(INDEX_HEADER), SELZON_CURRENT )
+            JVALUE = func YUTILS.IIF( SELZON_MESS <> AVOID.ACHAR, SELZON_MESS, SELZON_VAL )
+            VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(SELZON_CURRENT, JVALUE, 1)
+            INDEX_VALUES+=1
+          Endif
+        Next
+      Elsif([F:AOL]SELEXP(INDEX_HEADER) <> AVOID.ACHAR)
+        HEADER(INDEX_HEADER, 0) = "CUSTOM" + num$(INDEX_HEADER)
+        Read [YATE]NUMERO=GLANGUE;[F:AOL]SELINT(INDEX_HEADER)
+        HEADER(INDEX_HEADER, 1) = [F:YATE]TEXTE
+        INDEX_VALUES = 0
+        For [F] # se usiamo la filter_ F diventa LNK2
+          JVALUE = evalue([F:AOL]SELEXP(INDEX_HEADER))
+          VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR("CUSTOM" + num$(INDEX_HEADER), JVALUE, 1)
+          INDEX_VALUES+=1
+        Next
+      Endif
+    Next
+
+    #gestione alias a elaborazione terminata
+    Columns [LNK1]
+    Raz [F]
+
+    Gosub QUERY_FILTER
+
+    Local Char FIELDS(0)(0..1,0..1)
+    Local Char ALERT_WS(0)(0..1,0..1)
+    Local Char YOPENFUNCTION(250)(4) #SOLA inizializzazione array per apertura funzioni in Modale
+    Local Char YSELECTEDFIELDS(0)(1) #SOLA inizializzazione array per Selez Multi-campo
+
+    #caso in cui è stata inserita una query da mobile, se il count sul filtro è maggiore di 0 printiamo i filtrati su json
+    If(COUNT_CUSTOM > 0)
+      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, FILTERED_VALUES, YSELECTEDFIELDS)
+
+    #caso in cui NON c'è query, printiamo l'oggetto complessivo su json
+    Elsif(COUNT_VALUES > 0 & vireblc(QUERY, 2) = AVOID.ACHAR)
+
+      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, VALUES,YSELECTEDFIELDS)
+
+    Else
+      Local Char FIELDS(0)(1,1)
+      Local Char HEADER(0)(1,1)
+      Local Char DATA(0)(1,1)
+
+      RESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "Errore", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA, YSELECTEDFIELDS)
+    Endif
+
+    #LOG-SEL_OBJ
+    #Call YPRINT_DIR_CLB(YLOGDIRNAME,RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
+    #Call YPRINT_CLB(RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
+
+    #END_SELOBJ_LOG
+    Gosub YAX3MOB_SET_ENV From YAX3MLOG
+    Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, RESPONSE, "RESPONSE_" + "selobj_"+OBJECT, "json") From YUTILS
+
+  Endif
+
+Call FERME_TRACE From LECFIC
+End
+
+#########################################Selezione custom#################################################
+#**
+#*Sub per gestione Tabelle per Link - Selez Custom - X3/Mobile
+#*!
+
+$HANDLE_FILES
+
+  Gosub HANDLE_FILES From YAX3MWSLIBCUSTOM
+
+Return
+
+###########################################################################################################
+
+#**
+#*Sub per apertura tabelle e creazione LINK (contestualmente all'oggetto in esame) usate per la Selezione ad Oggetto
+#*!
+
+$GET_LINK
+
+  Gosub GET_LINK From YAX3MWSLIBOBJECT
+
+Return
+
+#########################################QUERY FILTER#################################################
+#**
+#*Sub per gestione ricerca nella Selezione (ad Oggetto/Custom) - MOBILE
+#*!
+
+$QUERY_FILTER
+
+  Local Char TEMP_VALUES(250)(0..COUNT_VALUES, NUM_COLS)
+  Local Shortint I, J, ADD_ITEM, INDEX_FILT_VALUES_X, INDEX_FILT_VALUES_Y
+
+  If(vireblc(QUERY, 2) <> '')
+    INDEX_FILT_VALUES_X = 0 : INDEX_FILT_VALUES_Y = 0
+    For I = 0 To dim(VALUES, 1) - 1
+      ADD_ITEM = 1
+      For J = 0 To dim(VALUES, 2) - 1
+        If instr(1, tolower(VALUES(I, J)), tolower(QUERY)) > 0
+          ADD_ITEM = 2
+          Break
+        Endif
+      Next J
+      If(ADD_ITEM = 2)
+        For J = 0 To NUM_COLS - 1
+          TEMP_VALUES(INDEX_FILT_VALUES_Y, J) = VALUES(I, J)
+        Next J
+        INDEX_FILT_VALUES_Y += 1
+      Endif
+    Next I
+  Endif
+
+  Local Shortint COUNT_CUSTOM
+  COUNT_CUSTOM = func YUTILS.COUNT_MULTI(TEMP_VALUES)
+
+  If COUNT_CUSTOM > 0
+    Local Char FILTERED_VALUES(250)(COUNT_CUSTOM, NUM_COLS)
+    For I = 0 To COUNT_CUSTOM - 1
+      For J = 0 To NUM_COLS - 1
+        FILTERED_VALUES(I, J) = TEMP_VALUES(I, J)
+      Next
+    Next
+  Endif
+
+Return
+
+#########################################SET_HEADERVALUES#################################################
+
+$SET_HEADERVALUES
+
+  Local Shortint INDEX_HEADER
+  For INDEX_HEADER = 0 To NUM_COLS - 1
+    HEADER(INDEX_HEADER, 0) = FIELDS(INDEX_HEADER)
+    HEADER(INDEX_HEADER, 1) = TIT(INDEX_HEADER)
+  Next
+
+  Local Shortint INDEX_VALUES
+  For INDEX_HEADER = 0 To NUM_COLS - 1
+    INDEX_VALUES = 0
+    For [LNK]
+
+      #Gestione Selezioni/SEL(Consultazioni Mobile) senza Multimedia
+      If(HEADER(INDEX_HEADER, 0)<>"actions")
+        VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), num$(evalue(COL(INDEX_HEADER))), 1)
+      Else
+        #Gestione multimedia
+Call ECR_TRACE("gestione Multimedia -header :" - HEADER(INDEX_HEADER, 0),0) From GESECRAN
+        VALUES(INDEX_VALUES, INDEX_HEADER) =  YMEDIA(INDEX_VALUES)
+
+Call ECR_TRACE("values :" -  VALUES(INDEX_VALUES, INDEX_HEADER),0) From GESECRAN
+      Endif
+      #VALUES(INDEX_VALUES, INDEX_HEADER) = func YJSONSERIALIZE.GET_STR(HEADER(INDEX_HEADER, 0), evalue(COL(INDEX_HEADER)), 1)
+      INDEX_VALUES+=1
+    Next
+  Next
+
+Return
+
+#########################################CONFIG_GRID######################################################
+#**
+#*Sub per Configurazione Griglia di selezione(Custom) - X3/MOBILE
+#*!
+
+$CONFIG_GRID
+
+  Gosub CONFIG_GRID From YAX3MWSLIBCUSTOM
+
+Return
+
+#########################################COUNT_ITEMS######################################################
+
+#utilità
+Funprog COUNT_ITEMS(SELZON, SELEXP)
+  Value Char SELZON()
+  Value Char SELEXP()
+
+  Local Integer I
+  Local Integer COUNT : COUNT = 0
+
+  For I = 0 To dim(SELZON) - 1
+    If(vireblc(SELZON(I),2) <> AVOID.ACHAR | vireblc(SELEXP(I),2) <> AVOID.ACHAR)
+      COUNT+=1
+    Endif
+  Next I
+
+End COUNT
+
+###########################################################################################################
+###########################################################################################################
+#**
+#* Sub per Selezione per Consultazioni (chiamata da YAX3MOB_ENDBUTTONACTION)
+#*!
+
+$SEL_CONS
+
+  #qui arrivo con già settati: LNK ; Critere ; Count_values; NUM_COLS = num
+  #ex INIT_GRID
+
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL: NBCOL = 0
+
+  If(vireblc(YFUNC_NAME,2)= AVOID.ACHAR)
+    Call ECR_TRACE("Attenzione! Il nome dello script(funzione) non è stato dichiarato!",0) From GESECRAN
+    YFUNC_NAME = "EMPTY_func_name"
+  Else
+
+    Gosub SET_AX3M_FIELDS From =YFUNC_NAME    #setting FIELDS per GRID
+    Default File [LNK]
+    Gosub SET_AX3M_TIT_COL From =YFUNC_NAME   #setting TIT & COL per GRID
+
+    Local Char HEADER(250)( NUM_COLS, 2 )
+    Local Char VALUES(250)( COUNT_VALUES, NUM_COLS )
+
+    #Vengono settati gli array HEADER e VALUES necessari per la serializzazione del JSON
+    Gosub SET_HEADERVALUES
+    Gosub QUERY_FILTER
+
+    Local Char EMPTY_FIELDS(0)(0..1,0..1)
+    Local Char ALERT_WS(0)(0..1,0..1)
+
+    #ATTENZIONE!! QUI: non necessario dichiarare YOPENFUNCTION: è un metodo per bottoni di Consultazione,
+    #dunque già dichiarato nell'INIT_BUTTONACTION
+    If(type(YOPENFUNCTION)<0)
+      Local Char YOPENFUNCTION(250)(4)
+    Endif
+
+    If(type(YSELECTEDFIELDS)<0)
+      Local Char YSELECTEDFIELDS(0)(1)
+    Endif
+
+    #caso in cui è stata inserita una query da mobile, se il count sul filtro è maggiore di 0 printiamo i filtrati su json
+    If(COUNT_CUSTOM > 0)
+      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION, EMPTY_FIELDS, HEADER, FILTERED_VALUES, YSELECTEDFIELDS)
+
+    #caso in cui NON c'è query, printiamo l'oggetto complessivo su json
+    Elsif(COUNT_VALUES > 0 & vireblc(QUERY, 2) = AVOID.ACHAR)
+
+      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(0, AVOID.ACHAR, AVOID.ACHAR, ALERT_WS, YOPENFUNCTION,EMPTY_FIELDS, HEADER, VALUES, YSELECTEDFIELDS)
+
+    #caso in cui non ci sono dati di output
+    Else
+      Local Char FIELDS(0)(1,1)
+      Local Char HEADER(0)(1,1)
+      Local Char DATA(0)(1,1)
+
+      YRESPONSE = func YJSONSERIALIZE.GENERATE_JSON(1, "error", "La ricerca non ha prodotto risultati!", ALERT_WS, YOPENFUNCTION,FIELDS, HEADER, DATA,YSELECTEDFIELDS)
+
+    Endif
+  Endif
+
+  #log-SEL_CONS
+  #Call YPRINT_CLB(YRESPONSE, "YRESPONSE_" + "selcons_"+YFUNC_NAME, "json") From YUTILS
+
+  #END_SELCONS
+  Gosub YAX3MOB_SET_ENV From YAX3MLOG
+  Call YPRINT_DIR_CLB(YPAYLOADDIRNAME, YRESPONSE, "YRESPONSE_" + "selcons_"+YFUNC_NAME, "json") From YUTILS
+Return

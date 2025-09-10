@@ -20,7 +20,7 @@ Return
 
 $DEBUT
 
-  Call OUVRE_TRACE ("YAPP - YCALCGIAC - Calcolo Giacenze AX3M- " - num$(date$)) From LECFIC
+  Call OUVRE_TRACE ("YAX3M - YCALCGIAC - Calcolo Giacenze AX3M- " - num$(date$)) From LECFIC
   Call ECR_TRACE("# -- Calcolo Giacenze AX3M -- ",0) From GESECRAN
   Raz [M:YCGC1]
 
@@ -88,17 +88,17 @@ Subprog C_GIACFCY(FCY, YCODICE, LOC, YAX3MRESP, YRESPONSE,ITMREF, EANCOD, SERNUM
 
   #business logic
   #Se campo sito inserito, controllo in anagrafica(STOCK)
-  If(vireblc(FCY,2) <> AVOID.ACHAR)
-    Filter [F:YSTO] Where ([F:YSTO]STOFCY = FCY)
-    If(rowcount([F:YSTO])= 0)
-      mkstat=2
-      YMESSAGE= "ATTENZIONE! Sito non in anagrafica STOCK"
-      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
-    Else
-      mkstat=0
-    Endif
-    Filter [F:YSTO]
-  Endif
+#  If(vireblc(FCY,2) <> AVOID.ACHAR)
+#    Filter [F:YSTO] Where ([F:YSTO]STOFCY = FCY)
+#    If(rowcount([F:YSTO])= 0)
+#      mkstat=2
+#      YMESSAGE= "ATTENZIONE! Sito non in anagrafica STOCK"
+#      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+#    Else
+#      mkstat=0
+#    Endif
+#    Filter [F:YSTO]
+#  Endif
 
   #end
   Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
@@ -180,7 +180,7 @@ Subprog C_GIACLOC(FCY, YCODICE, LOC, YAX3MRESP, YRESPONSE,ITMREF, EANCOD, SERNUM
   Variable Decimal QTY()
   Variable Char STU()
 
-  Local File STOCK [F:YSTO]
+  Local File STOLOC [F:YSTC]
   Local Char YYLOC(10):YYLOC=LOC
   Local Char YCRITERE(250): YCRITERE ="1=1"
 
@@ -193,24 +193,25 @@ Subprog C_GIACLOC(FCY, YCODICE, LOC, YAX3MRESP, YRESPONSE,ITMREF, EANCOD, SERNUM
   Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
 
   #business logic: se campo Ubic inserito, controllo in anagrafica(STOCK)
-  If(vireblc(FCY,2) <> AVOID.ACHAR)
-    YCRITERE-="& instr(1, tolower([F:YSTO]STOFCY), tolower('" + FCY + "'))<>0"
-  Endif
+#  If(vireblc(FCY,2) <> AVOID.ACHAR)
+#    YCRITERE-="& instr(1, tolower([F:YSTO]STOFCY), tolower('" + FCY + "'))<>0"
+#  Endif
 
-  If(vireblc(LOC,2) <> AVOID.ACHAR)
-    YCRITERE-="& instr(1, tolower([F:YSTO]LOC), tolower('" + YYLOC + "'))<>0"
-  Endif
+#  If(vireblc(LOC,2) <> AVOID.ACHAR)
+#    YCRITERE-="& instr(1, tolower([F:YSTO]LOC), tolower('" + YYLOC + "'))<>0"
+#  Endif
 
-  If(vireblc(LOC,2) <> AVOID.ACHAR)
-    Filter [F:YSTO] Where evalue(YCRITERE)
-    If(rowcount([F:YSTO])= 0)
+  If(vireblc(YYLOC,2) <> AVOID.ACHAR)
+    #Filter [F:YSTO] Where evalue(YCRITERE)
+    Filter [F:YSTC] Where [F:YSTC]LOC =YYLOC
+    If(rowcount([F:YSTC])= 0)
       mkstat=2
       YMESSAGE= "ATTENZIONE! Ubicazione non in anagrafica STOCK"
       Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
     Else
       mkstat=0
     Endif
-    Filter [F:YSTO]
+    Filter [F:YSTC]
   Endif
 
   #end

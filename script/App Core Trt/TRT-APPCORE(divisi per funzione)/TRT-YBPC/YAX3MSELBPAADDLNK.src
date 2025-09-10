@@ -1,0 +1,74 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$INIT_GRID
+  Local Char TIT(250)(NUM_COLS)
+  Local Char COL(250)(NUM_COLS)
+  Local Char FIELDS(20)(NUM_COLS)
+  Local Integer NBCOL
+Return
+
+# Gestione Selezione BPAADD per Funzione ###################################################################################
+
+#YBPC
+$BPAADD_BPC
+
+  Gosub SET_LINK_YBPC
+
+  If (IS_MOBILE = 1)
+    Gosub INIT_CRITERE_YBPC_FIELDS
+  Endif
+
+  Gosub SET_CRITERE_YBPC
+  Gosub SET_TITCOL_YBPC
+Return
+
+#########################################################################################à
+$SET_LINK_YBPC
+
+  Filter [LNK] Where ([LNK]CODFIC="ATABDIV" & [LNK]IDENT1 = "13370" & [LNK]ZONE="LNGDES" & [LNK]LANGUE="ITA")
+
+Return
+
+#####################################################################################
+$INIT_CRITERE_YBPC_FIELDS
+
+Return
+
+#######################################################################################
+
+$SET_CRITERE_YBPC
+
+  NUM_COLS = 2
+
+  If IS_MOBILE = 2
+    Gosub INIT_GRID
+    #Filter [LNK] Where evalue(CRITERE)
+    #Filter [LNK]
+    COUNT_VALUES = rowcount([LNK])
+    FIELDS(0) = "BPAADD" : FIELDS(1) = "Descrizione"
+    NBCOL = 0
+  Else
+    GSELFAC = 1
+    TIT(0) = "Selezione Tipologia Indirizzo"
+#      ORDRE = "[F:YITM]ITMREF;[F:YITM]ITMDES1"
+#      START = "[F:YITM]ITMREF"
+    DEFPAG = 1
+    NBCOL = 1
+
+    Local Char CRITERE(250)
+    CRITERE = "1=1"
+  Endif
+
+Return
+
+################################################################################à
+
+$SET_TITCOL_YBPC
+
+  Default File [LNK]
+
+  #Imposto Colonne Lookup
+  TIT(NBCOL) = "Tipologia Indirizzo"
+  COL(NBCOL)="[F:LNK]IDENT2"
+  NBCOL += 1 : TIT(NBCOL) = "Descrizione"
+  COL(NBCOL)="[F:LNK]TEXTE"
+Return

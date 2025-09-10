@@ -1,0 +1,524 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#############################################################################################################################
+#
+#MC - CONSULTAZIONE GIACENZE - Consultazione App ArgoX3 Mobile - 22/05/2024
+#
+#############################################################################################################################
+
+$ACTION
+
+#If GUSER='ADMIN' : Infbox(ACTION) : Endif
+
+  Case ACTION
+    When "DEBUT"         : Gosub DEBUT
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+Return
+
+###########################################################
+
+$DEBUT
+
+  Call OUVRE_TRACE ("YAPP - YCALCGIAC - Calcolo Giacenze AX3M- " - num$(date$)) From LECFIC
+  Call ECR_TRACE("# -- Calcolo Giacenze AX3M -- ",0) From GESECRAN
+  Raz [M:YCGC1]
+
+Return
+
+##########################################################
+
+$FIN
+  Call FERME_TRACE From LECFIC
+  Call LEC_TRACE From LECFIC
+Return
+
+########################################################################################################################
+
+#**
+#* Inizializzazione - NOTA: Se la finestra è composta da più  maschere, aggiungere YCURRMSK1, YCURRMSKALIAS1,...
+#*!
+
+$INIT_FILE
+
+  Local Char YWINNAME(20): YWINNAME = "YCALCGIAC"
+  Local Char YCURRMSK(20): YCURRMSK = "YCALCGIAC1"      #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSK1(20): YCURRMSK1 = "<Nome>"
+  Local Char YCURRMSKALIAS(20): YCURRMSKALIAS = "YCGC1"  #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSKALIAS1(20): YCURRMSKALIAS1 = "<NomeAlias>"
+  Local Char YACTION(20)
+  Local Char YCURRFIELD(20)
+Return
+
+########################################################################################################################
+################################################ SUBPROG /FUNPROG ######################################################
+########################################################################################################################
+
+#=======================================================================================================================
+#                                                  AZIONI-CAMPO
+#=======================================================================================================================
+
+# AZIONE-CAMPO - C - Controllo FCY in anagrafica STOCK => NON ASSEGNATA!!!!
+Subprog C_GIACFCY(FCY, YCODICE, LOC, YAX3MRESP, YRESPONSE,ITMREF, EANCOD, SERNUM, YLOC, LOT, STA, QTY, STU )
+
+  Variable Char FCY
+  Variable Char YCODICE
+  Variable Char LOC
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char EANCOD()
+  Variable Char SERNUM()
+  Variable Char YLOC()
+  Variable Char LOT()
+  Variable Char STA()
+  Variable Decimal QTY()
+  Variable Char STU()
+
+  Local File STOCK [F:YSTO]
+
+  Call OUVRE_TRACE("C_GIACFCY") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCGIACFCY"
+  YCURRFIELD = "FCY"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  #Se campo sito inserito, controllo in anagrafica(STOCK)
+  If(vireblc(FCY,2) <> AVOID.ACHAR)
+    Filter [F:YSTO] Where ([F:YSTO]STOFCY = FCY)
+    If(rowcount([F:YSTO])= 0)
+      mkstat=2
+      YMESSAGE= "ATTENZIONE! Sito non in anagrafica STOCK"
+      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+    Else
+      mkstat=0
+    Endif
+    Filter [F:YSTO]
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+
+#################################################################################################################
+# AZIONE-CAMPO - C - Controllo codice in anagrafica STOCK
+
+Subprog C_GIACYCOD(FCY, YCODICE, LOC, YAX3MRESP, YRESPONSE,ITMREF, EANCOD, SERNUM, YLOC, LOT, STA, QTY, STU )
+
+  Variable Char FCY
+  Variable Char YCODICE
+  Variable Char LOC
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char EANCOD()
+  Variable Char SERNUM()
+  Variable Char YLOC()
+  Variable Char LOT()
+  Variable Char STA()
+  Variable Decimal QTY()
+  Variable Char STU()
+
+  Call OUVRE_TRACE("C_GIACYCOD") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCGIACYCOD"
+  YCURRFIELD = "YCODICE"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Local File STOCK [F:YSTO]
+  Local File ITMMASTER [F:YITM]
+  YCODICE = vireblc(YCODICE,2)
+
+  Link [YSTO] With [YITM]ITM0=[YSTO]ITMREF
+&             As [LNK]
+  Columns [LNK] ([YSTO]ITMREF,[YITM]ITMDES1,[YITM]EANCOD,[YSTO]SERNUM)
+  Filter [LNK]  Where ([F:YSTO]ITMREF = YCODICE | [F:YITM]EANCOD = YCODICE | [F:YSTO]SERNUM = YCODICE)
+
+  If(rowcount([LNK]) > 0)
+    mkstat = 0
+  Else
+    mkstat = 2
+    YMESSAGE = "Il codice" - YCODICE - "non è presente in anagrafica!"
+    Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+  Endif
+  Filter [LNK]
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#############################################################################################################################
+
+#LOC
+Subprog C_GIACLOC(FCY, YCODICE, LOC, YAX3MRESP, YRESPONSE,ITMREF, EANCOD, SERNUM, YLOC, LOT, STA, QTY, STU )
+
+  Variable Char FCY
+  Variable Char YCODICE
+  Variable Char LOC
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char EANCOD()
+  Variable Char SERNUM()
+  Variable Char YLOC()
+  Variable Char LOT()
+  Variable Char STA()
+  Variable Decimal QTY()
+  Variable Char STU()
+
+  Local File STOCK [F:YSTO]
+  Local Char YYLOC(10):YYLOC=LOC
+  Local Char YCRITERE(250): YCRITERE ="1=1"
+
+  Call OUVRE_TRACE("C_GIACLOC") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCGIACLOC"
+  YCURRFIELD = "LOC"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic: se campo Ubic inserito, controllo in anagrafica(STOCK)
+  If(vireblc(FCY,2) <> AVOID.ACHAR)
+    YCRITERE-="& instr(1, tolower([F:YSTO]STOFCY), tolower('" + FCY + "'))<>0"
+  Endif
+
+  If(vireblc(LOC,2) <> AVOID.ACHAR)
+    YCRITERE-="& instr(1, tolower([F:YSTO]LOC), tolower('" + YYLOC + "'))<>0"
+  Endif
+
+  If(vireblc(LOC,2) <> AVOID.ACHAR)
+    Filter [F:YSTO] Where evalue(YCRITERE)
+    If(rowcount([F:YSTO])= 0)
+      mkstat=2
+      YMESSAGE= "ATTENZIONE! Ubicazione non in anagrafica STOCK"
+      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+    Else
+      mkstat=0
+    Endif
+    Filter [F:YSTO]
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#=======================================================================================================================
+#                                               BOTTONI DI FINESTRA
+#=======================================================================================================================
+
+Subprog YCALC_GC(YLAYOUT,FCY,YCODICE,LOC,YAX3MRESP,YRESPONSE,ITMREF,EANCOD,SERNUM,YLOC,LOT,STA,QTY,STU)
+
+  Value Integer YLAYOUT
+  Variable Char FCY
+  Variable Char YCODICE
+  Variable Char LOC
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char EANCOD()
+  Variable Char SERNUM()
+  Variable Char YLOC()
+  Variable Char LOT()
+  Variable Char STA()
+  Variable Decimal QTY()
+  Variable Char STU()
+
+  Local Integer K,YI,YSUCCESS : YSUCCESS = 0
+
+  #apertura traccia
+  Call OUVRE_TRACE("YCALC_GC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCALCGC"
+  YCURRFIELD = ""
+
+  #init
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
+  YFUNC_NAME = "YCALCGIAC" : YFUNC_TYPE = "CONS"
+  NUM_COLS=9 #num campi riquadro (per AX3M)(N° campi Riq +1 (ITMDES1 in legame esteso)
+
+  #business logic
+  Gosub OPEN_FILES     #Apertura Tabelle
+  Gosub SET_CRITERE    #Critere
+  Gosub SET_LINK       #Creaz Link [LNK]
+
+  #filter LINK + rowcount
+  Filter [LNK] Where evalue(CRITERE)
+  COUNT_VALUES = rowcount([LNK])
+
+  #Popolamento
+  If(COUNT_VALUES=0)
+    YSUCCESS=1
+    mkstat=2
+  Else
+    YSUCCESS =0
+    #YMESSAGE = "rwcnt= "- num$(COUNT_VALUES)
+
+
+    For [LNK]
+      ITMREF(YI)= [F:YSTO]ITMREF
+      EANCOD(YI)= [F:YITM]EANCOD
+      SERNUM(YI)= [F:YSTO]SERNUM
+      YLOC(YI)= [F:YSTO]LOC
+      LOT(YI) = [F:YSTO]LOT
+      STA(YI) = [F:YSTO]STA
+      QTY(YI)= [F:YSTO]QTYSTU - [YSTO]CUMALLQTY - [YSTO]CUMWIPQTY
+      STU(YI)= [F:YITM]STU
+
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"ITMREF",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"EANCOD",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"SERNUM",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"YLOC",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOT",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STA",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"QTY",YI) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STU",YI) From YAX3MUTILS
+
+      YI+=1
+
+      If(YI= maxtab(ITMREF))
+        Break
+      Endif
+    Next
+
+    #TODO:TRADUCI PER AX3M : YAX3MOB_AFFZO_NBLIG(YCURRMASKALIAS,"NBLIG")
+    If(![V]GWEBSERV)
+      [M:YCGC1]NBLIG = YI
+      Affzo[M:YCGC1]
+    Endif
+    #Call YAX3MOB_UPDATE_NBLIG(YMSKALIAS,"NBLIG",YI) From YAX3MUTILS_BETA
+  Endif
+
+#Call ECR_TRACE("QUI"-"- RWCNT = "-num$(COUNT_VALUES),0) From GESECRAN
+
+  #end
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+##########################################################################################################################################
+#Bottone Pulizia Videata
+
+Subprog YCLEARCGC(FCY,YCODICE,LOC,YAX3MRESP,YRESPONSE,ITMREF,EANCOD,SERNUM,YLOC,LOT,STA,QTY,STU)
+
+  Variable Char FCY
+  Variable Char YCODICE
+  Variable Char LOC
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char ITMREF()
+  Variable Char EANCOD()
+  Variable Char SERNUM()
+  Variable Char YLOC()
+  Variable Char LOT()
+  Variable Char STA()
+  Variable Decimal QTY()
+  Variable Char STU()
+
+  Local Integer K
+
+  Call OUVRE_TRACE("YCLEARCGC") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCLEARCGC"
+  YCURRFIELD = ""
+
+  #init
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
+
+  #business logic
+  Raz FCY,YCODICE,LOC
+
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"FCY") From YAX3MUTILS
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"YCODICE") From YAX3MUTILS
+  Call YAX3MOB_AFFZO(YCURRMSKALIAS,"LOC") From YAX3MUTILS
+
+  For K = 0 To func YUTILS.COUNT(ITMREF) - 1
+    Raz ITMREF(K),EANCOD(K),SERNUM(K),YLOC(K),LOT(K),STA(K),QTY(K),STU(K) #dettaglio
+
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"ITMREF",K) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"ITMDES1",K) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"EANCOD",K) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"SERNUM",K) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"YLOC",K) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOT",K) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STA",K) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"QTY",K) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STU",K) From YAX3MUTILS
+  Next
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+###########################################################################################################################################
+#**
+#*Sub dove vengono aperte le tabelle per la Link
+#*(Body della Sub: contestuale alla funzione di Consultazione)
+#*!
+
+$OPEN_FILES
+
+  Local File ITMMASTER [F:YITM]
+  Local File STOSER [F:YSTS]
+  Local File STOCK [F:YSTO]
+Return
+
+############################################################################################################################################
+#**
+#*Sub dove viene impostato il Critere attraverso cui filtrare la Link
+#*(Body della Sub: contestuale alla funzione di Consultazione)
+#*!
+
+$SET_CRITERE
+
+  Local Integer YNITM,YNSERN,YNEAN
+
+  Local Char YTRIVCOND(10): YTRIVCOND = "1=1"
+  CRITERE(0) = YTRIVCOND                # "1=1"
+  CRITERE(1) = chr$(32)+"&"+YTRIVCOND   #" & 1=1"
+
+  #filtro: FCY
+  If(vireblc(FCY,2) <> AVOID.ACHAR)
+    CRITERE(0)-="& instr(1, tolower([F:YSTO]STOFCY), tolower('" + FCY + "'))<>0"
+  Endif
+
+  #filtro: YCODICE
+  If(vireblc(YCODICE,2) <> AVOID.ACHAR)
+
+    #cerco eventuali Cod.Articolo
+    Filter [F:YSTO] Where [F:YSTO]ITMREF = YCODICE
+    YNITM= rowcount([F:YSTO])
+    Filter [F:YSTO]
+
+    #cerco eventuali Matricole
+    Filter [F:YSTO] Where [F:YSTO]SERNUM = YCODICE
+    YNSERN= rowcount([F:YSTO])
+    Filter [F:YSTO]
+
+    #cerco eventuali Cod.EAN
+    Filter [F:YITM] Where [F:YITM]EANCOD = YCODICE
+    YNEAN= rowcount([F:YITM])
+    Filter [F:YITM]
+
+    If(YNITM>0)
+      CRITERE(0)-="& instr(1, tolower([F:YSTO]ITMREF), tolower('" + YCODICE + "'))<>0"
+    Endif
+    If(YNSERN>0)
+      CRITERE(0)-="& instr(1, tolower([F:YSTO]SERNUM), tolower('" + YCODICE + "'))<>0"
+    Endif
+    If(YNEAN>0)
+      CRITERE(0)-="& instr(1, tolower([F:YITM]EANCOD), tolower('" + YCODICE + "'))<>0"
+    Endif
+  Endif
+
+  #filtro: LOC
+  If(vireblc(LOC,2) <> AVOID.ACHAR)
+    #CRITERE(1)-="& instr(1, tolower([F:YSTO]LOC), tolower('" + LOC + "'))<>0"
+    CRITERE(1)-="& [F:YSTO]LOC ='" + LOC + "'"
+  Endif
+
+Return
+
+############################################################################################################################################
+#**
+#*Sub dove viene impostata la LINK
+#*(Body della Sub: contestuale alla funzione di Consultazione)
+#*!
+
+$SET_LINK
+
+  Link [YSTO] With [YITM]ITM0=[YSTO]ITMREF,
+&                  [YSTS]STS0=[YSTO]ITMREF;[YSTO]SERNUM
+&                  As [LNK] Where ([F:YSTO]QTYSTU - [YSTO]CUMALLQTY - [YSTO]CUMWIPQTY >0)
+
+  Columns [LNK] ([YSTO]ITMREF,[YITM]ITMDES1,[YITM]EANCOD,[YSTO]SERNUM,[YSTO]LOC,[YSTO]LOT,[YSTO]STA,[YSTO]QTYSTU,
+&                [YSTO]CUMALLQTA,[YSTO]CUMALLQTY,[YSTO]CUMWIPQTY,[YITM]STU)
+Return
+
+##################################################################################################################
+#                         SOLO AX3M
+##################################################################################################################
+#**
+#*Sub per Valori ed Etichette della Grid [SOLO  MOBILE!]
+#*(Body della Sub: contestuale alla funzione di Consultazione)
+#*!
+
+$SET_AX3M_TIT_COL
+
+  Call TEXTFIC("STOCK","ITMREF",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]ITMREF"
+  NBCOL += 1 : Call TEXTFIC("ITMMASTER","ITMDES1",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "func AFNC.TEXTRA('ITMMASTER','DES1AXX',[F:YSTO]ITMREF,'')"
+  NBCOL += 1 : Call TEXTFIC("ITMMASTER","EANCOD",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YITM]EANCOD"
+  NBCOL += 1 : Call TEXTFIC("STOCK","SERNUM",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]SERNUM"
+  NBCOL += 1 : Call TEXTFIC("STOCK","LOC",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]LOC"
+  NBCOL += 1 : Call TEXTFIC("STOCK","LOT",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]LOT"
+  NBCOL += 1 : Call TEXTFIC("STOCK","STA",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YSTO]STA"
+  NBCOL += 1 : TIT(NBCOL)="Giacenza"
+  COL(NBCOL) = "num$([F:YSTO]QTYSTU-[F:YSTO]CUMALLQTY-[F:YSTO]CUMWIPQTY)"
+  NBCOL += 1 : Call TEXTFIC("ITMMASTER","STU",2,TIT(NBCOL)) From OBJDIV
+  COL(NBCOL) = "[F:YITM]STU"
+
+Return
+
+###################################################################################################################
+#ITMREF,EANCOD,SERNUM,YLOC,LOT,STA,QTY,STU
+
+#**
+#*Sub per Etichette (Valori della matrice Header) [SOLO  MOBILE!]
+#*(Body della Sub: contestuale alla funzione di Consultazione)
+#*!
+
+$SET_AX3M_FIELDS
+
+  FIELDS(0) = "ITMREF" : FIELDS(1) = "ITMDES1": FIELDS(2) = "EANCOD" : FIELDS(3) = "SERNUM"
+  FIELDS(4) = "YLOC" : FIELDS(5) = "LOT" : FIELDS(6) = "STA" : FIELDS(7) = "QTY" : FIELDS(8) = "STU"
+
+Return
+
+###################################################################################################################
+###################################################################################################################
+
+Funprog YAX3MOB_SWFLDVAL(YFIELDS,YPARAM,YFIELDCODE)
+
+  Variable Char YFIELDS()(,)
+  Value Char YPARAM
+  Value Char YFIELDCODE
+  Local Char YVALUE(250)
+  Const Integer YCOL_VALUE : YCOL_VALUE = 2
+
+  If(![V]GWEBSERV)
+    YVALUE = YPARAM
+  Else
+    Local Integer YI : YI = func YUTILS.FIND_ITEM(YFIELDS,YFIELDCODE)
+    YVALUE = YFIELDS(YI,YCOL_VALUE)
+  Endif
+
+End YVALUE

@@ -1,0 +1,138 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#**
+#* Funzione per ottenere la Legislazione, dato il Sito#*
+#* @param YFCY Sito
+#*!
+
+Funprog YGET_LEG(YFCY)
+
+  Value Char YFCY
+  Local File FACILITY [F:YFCY]
+  Local File COMPANY [F:YCPY]
+  Local Char YLEGCPY(5),YLEG(20)
+
+  Columns [F:YFCY](FCY,FCYNAM,LEGCPY)
+  Read [F:YFCY]FCY0 = YFCY
+
+  If !fstat
+    YLEGCPY = [F:YFCY]LEGCPY
+    Columns [F:YCPY](CPY,LEG)
+    Read [F:YCPY]CPY0 = YLEGCPY
+    If !fstat
+      YLEG = [F:YCPY]LEG
+    Else
+      #ax3mlog
+    Endif
+  Else
+   #ax3mlog
+  Endif
+End YLEG
+
+###########################################################################################
+#**
+#* Controllo della disponibilità in Stock di un Articolo in un Sito & ubicazione
+#*
+#* @param FCY Sito dove controllare qtà disponibile
+#* @param ITMREF Cod articolo di cui controllare la qtà disponibile
+#* @param LOC Ubicazione dove controllare qtà disponibile
+#* @param LOT Lotto dove controllare qtà disponibile
+#* @param YSTODIS Qtà Stodispo
+#*!
+
+Subprog YGETSTODISPO(FCY,ITMREF,LOC,LOT,YSTODIS)
+
+  Value Char FCY
+  Value Char ITMREF
+  Value Char LOC
+  Value Char LOT
+  Variable Decimal YSTODIS
+
+  Local File ITMMVT [F:YITV]
+  Local File ITMMASTER [F:YITM]
+  Local File ITMCATEG [F:ITG]
+  Local Integer YSTA
+
+  Read [F:YITM]ITM0 = ITMREF
+  Columns [F:YITM](TCLCOD)
+  Read [F:ITG]ITG0 = "";[F:YITM]TCLCOD
+  Columns [F:ITG](GLOAAAFLG,GLOQQQFLG,GLORRRFLG)
+  Read [F:YITV]ITV0=ITMREF;FCY
+
+  If [F:ITG]GLOAAAFLG = 2 YSTA += 1 Endif
+  If [F:ITG]GLOQQQFLG = 2 YSTA += 2 Endif
+  If [F:ITG]GLORRRFLG = 2 YSTA += 4 Endif
+
+  #Call STODISPO("[F:YITV]",FCY,ITMREF,"*",LOC,1,YSTA,"","","","",YSTODIS) From STKLIB
+  Call STODISPO("[F:YITV]",FCY,ITMREF,LOT,LOC,1,YSTA,"","","","",YSTODIS) From STKLIB
+End
+
+################################
+
+Subprog YGETSTODISPO1(YFCY,YITMREF,YLOC,YLOT,YSTODIS)
+
+  Value Char YFCY
+  Value Char YITMREF
+  Value Char YLOC
+  Value Char YLOT
+  Variable Decimal YSTODIS
+
+  Local File STOCK [F:YSTO]
+  YLOT = vireblc(YLOT,2)
+
+  If(YLOT <> AVOID.ACHAR)
+    Filter [F:YSTO] Where ([F:YSTO]STOFCY = YFCY & [F:YSTO]ITMREF = YITMREF & [F:YSTO]LOT = YLOT & [F:YSTO]LOC = YLOC)
+    For [F:YSTO]
+      YSTODIS += ([F:YSTO]QTYSTU - [F:YSTO]CUMALLQTY - [F:YSTO]CUMWIPQTY)
+    Next
+  Else
+    Filter [F:YSTO] Where ([F:YSTO]STOFCY = YFCY & [F:YSTO]ITMREF = YITMREF & [F:YSTO]LOC = YLOC)
+    For [F:YSTO]
+      YSTODIS += ([F:YSTO]QTYSTU - [F:YSTO]CUMALLQTY - [F:YSTO]CUMWIPQTY)
+    Next
+  Endif
+  Filter [F:YSTO]
+
+End
+
+##############################################################################
+#**
+#* Metodo per ricavare Tipo Ubicazione
+#* @param YFCY Sito
+#* @param YLOC Ubicazione
+#*!
+
+Funprog YGET_LOCTYP(YFCY,YLOC)
+
+  Value Char YFCY
+  Value Char YLOC
+  Local File STOLOC [F:YSTC]
+  Local Char YLOCTYP(5)
+
+  Columns [F:YSTC](LOCTYP)
+  Read [F:YSTC]STC0 = YFCY;YLOC
+
+  If(!fstat)
+    YLOCTYP = [F:YSTC]LOCTYP
+  Endif
+End YLOCTYP
+#####################################################################################
+#**
+#* Funzione che ritorna 2: se ubic(YLOC) è MONOITM, 1: Altrimenti
+#*
+#* @param YFCY Sito
+#* @param YLOC Ubicazione da valutare se Monoitm o meno
+#*!
+
+Funprog YISMONOITM(YFCY,YLOC)
+
+  Value Char YFCY
+  Value Char YLOC
+
+  Local Integer YMONOFLG
+  Local File STOLOC [F:YSTC]
+  Read [F:YSTC]STC0 = YFCY;YLOC
+  YMONOFLG = [F:YSTC]MONITMFLG
+
+Call ECR_TRACE("YISMONOITM:"-YFCY-"-"-YLOC-"-"-num$(YMONOFLG),0) From GESECRAN
+
+End YMONOFLG

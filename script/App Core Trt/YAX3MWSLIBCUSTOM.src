@@ -15,6 +15,7 @@ $HANDLE_FILES
       Case TYPE_FIELD
         When "LOC"
           If OPEN = 2
+            If clalev([F:YSTO])=0 : Local File STOCK [YSTO] : Endif
             If clalev([F:YSTC])=0 : Local File STOLOC [YSTC] : Endif
             If clalev([F:YITF])=0 : Local File ITMFACILIT [YITF] : Endif
             If clalev([F:YFCY])=0 : Local File FACILITY [YFCY] : Endif
@@ -105,6 +106,30 @@ $HANDLE_FILES
 
     When "YBPC","YVBPC"
       Case TYPE_FIELD
+          When "BPCNUM"
+            If OPEN = 2
+               Local File BPCUSTOMER [YBPC]
+               Local File BPADDRESS [YBPA]
+               Local File BPARTNER [YBPR]
+               Local File BPCCATEG [YBCG]
+               Local File SALESREP [YREP]
+            Endif
+
+          When "VACBPR"
+            If OPEN = 2
+               Local File TABVACBPR [LNK]
+            Endif
+
+          When "PTE"
+            If OPEN = 2
+               Local File TABPAYTERM [LNK]
+            Endif
+
+          When "ACCCOD"
+            If OPEN = 2
+               Local File GACCCODE [LNK]
+            Endif
+
           When "BPAADD"
             If OPEN = 2
                Local File ATEXTRA [LNK]
@@ -216,6 +241,18 @@ $CONFIG_GRID
 
      When "YBPC","YVBPC"  #Creaz Cliente
       Case TYPE_FIELD
+
+        When "BPCNUM"
+          Gosub BPCNUM_BPC From YAX3MSELBPCNUMLNK
+
+        When "VACBPR"
+          Gosub VAC_BPC From YAX3MSELVACLNK
+
+        When "PTE"
+          Gosub PTE_BPC From YAX3MSELPTELNK
+
+        When "ACCCOD"
+          Gosub ACC_BPC From YAX3MSELACCLNK
 
         When "BPAADD"
           Gosub BPAADD_BPC From YAX3MSELBPAADDLNK

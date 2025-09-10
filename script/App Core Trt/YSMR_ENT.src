@@ -24,7 +24,7 @@ Return
 
 $DEBUT
 
-  Call OUVRE_TRACE ("YAPP - YSMR - Gestione Entrate Diverse - " - num$(date$)) From LECFIC
+  Call OUVRE_TRACE ("YAX3M - YSMR - Gestione Entrate Diverse - " - num$(date$)) From LECFIC
   Call ECR_TRACE("# -- Gestione Entrate Diverse --- ",0) From GESECRAN
   Raz [M:YSMR1]
 Return
@@ -96,14 +96,27 @@ Subprog C_STOENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU,
     mkstat = 2
     YMESSAGE = "ATTENZIONE! Sito inesistente!"
     Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
-    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"mex :"-YMESSAGE) From YAX3MLOG     #log
   Else
     mkstat = 0
-    Call YAX3MOB_ECRTRACE(mkstat,"Sito in anagrafica") From  YAX3MUTILS     #log
+    Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,[F:YFCY]FCYNAM,CURRENTROW) From YAX3MUTILS  #label per FCY valorizzat con FCYNAM
+    Call YAX3MOB_ECRTRACE(mkstat,"Sito in anagrafica") From YAX3MLOG     #log
+
+    #Pulizia Riquadro (se presenti records)
+    If(func YUTILS.COUNT(ITMREF)>0)
+      Local Integer YI
+      #For YI = 0 To func YUTILS.COUNT(ITMREF)-1
+      For YI = 0 To func YUTILS.COUNT(ITMREF)
+        Raz ITMREF(YI),STU(YI),QTYSTU(YI),LOC(YI),LOCTYP(YI),LOT(YI),SERNUM(YI)
+      Next
+      #Raz ITMREF,STU,QTYSTU,LOC,LOCTYP,LOT,SERNUM
+      #Call YCLEANRIQ_YSMR(YFIELDS,YCURRMSKALIAS,ITMREF,STU,QTYSTU,LOC,LOCTYP,LOT,SERNUM)
+    Endif
   Endif
 
   #end
-  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS   #print clb: "yresponse", "end"
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILS
+  #Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS   #print clb: "yresponse", "end"
   Call FERME_TRACE From LECFIC
 End
 
@@ -142,6 +155,14 @@ Subprog AM_ITRENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
 
   #business logic
   Call YSTRVALEUR(ITMREF,YITMREF,CURRENTROW) From YAX3MUTILS
+
+  #PULISCO: linea & labels
+  Raz STU(CURRENTROW), QTYSTU(CURRENTROW), LOC(CURRENTROW), LOCTYP(CURRENTROW), STA(CURRENTROW), LOT(CURRENTROW), SERNUM(CURRENTROW)
+  Call YAX3MOB_RAZLABEL(YFIELDS,"ITMREF",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_RAZLABEL(YFIELDS,"LOC",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_RAZLABEL(YFIELDS,"LOCTYP",CURRENTROW) From YAX3MUTILS
+
+  #Ricerca in anagrafica
   Columns [F:YITF](DEFLOC)
   Read [F:YITF]ITF0 = YITMREF;FCY
   #Read [F:YITF]ITF0 = ITMREF(CURRENTROW);FCY
@@ -150,13 +171,18 @@ Subprog AM_ITRENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
     mkstat=2
     YMESSAGE="ATTENZIONE! Cod. Articolo non associato al sito o inesistente!"
     Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
-    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS    #log
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MLOG    #log
+    Raz YITMREF
   Else
     Columns [F:YSTC](LOCTYP)
     Read [F:YSTC]STC0=FCY;[F:YITF]DEFLOC
     #se l'articolo ha un ubicazione di default settiamo in automatico lo stato A, altrimenti lo fa l'azione campo sull'ubicazione
     If fstat=0
       LOC(CURRENTROW) = [F:YITF]DEFLOC
+
+Call ECR_TRACE("Ubic. di default (Sito:"-FCY-","-"Articolo :"-YITMREF-") :"- LOC(CURRENTROW),0) From GESECRAN
+      Call YAX3MOB_ECRTRACE(0,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-"Ubic. di default (Sito:"-FCY-","-"Articolo :"-YITMREF-") :"- LOC(CURRENTROW)) From YAX3MLOG
+
       Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOC",CURRENTROW) From YAX3MUTILS
       LOCTYP(CURRENTROW) = [F:YSTC]LOCTYP
       Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOCTYP",CURRENTROW) From YAX3MUTILS
@@ -171,7 +197,7 @@ Subprog AM_ITRENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
       mkstat=2
       YMESSAGE="ATTENZIONE! Cod. Articolo inesistente!"
       Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
-      Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+      Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MLOG     #log
     Else
       mkstat =0
 
@@ -192,10 +218,13 @@ Subprog AM_ITRENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
       If([F:YITM]LOTMGTCOD < 2)
         Call YAX3MOB_DISZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"LOT",CURRENTROW) From YAX3MUTILS
       Endif
-      Call YAX3MOB_ECRTRACE(mkstat,"Articolo in anagrafica") From  YAX3MUTILS     #log
-
+      Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,[F:YITM]ITMDES1,CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_ECRTRACE(mkstat,"Articolo in anagrafica") From YAX3MLOG     #log
     Endif
   Endif
+
+  #Aggiorno Linea su X3
+  Gosub YAFFZO_LINE_YSMR
 
   #end
   Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
@@ -237,9 +266,9 @@ Subprog C_QTSTENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
     mkstat =2
     YMESSAGE = "ATTENZIONE! Quantità inserita nulla!"
     Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
-    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MUTILS     #log
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MLOG     #log
   Else
-    Call YAX3MOB_ECRTRACE(mkstat,"Quantità imputata > 0") From YAX3MUTILS     #log
+    Call YAX3MOB_ECRTRACE(mkstat,"Quantità imputata > 0") From YAX3MLOG     #log
   Endif
 
   #end
@@ -284,8 +313,12 @@ Subprog C_LOCENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU,
 
   #business logic
   Call YSTRVALEUR(LOC,YLOC,CURRENTROW) From YAX3MUTILS
+  YLOC = vireblc(YLOC,2)
   Columns [F:YSTC](LOCTYP)
   Read [F:YSTC]STC0 = FCY;YLOC
+
+  #pulisco label LOC
+  Call YAX3MOB_RAZLABEL(YFIELDS,YCURRFIELD,CURRENTROW) From YAX3MUTILS
 
   If(fstat = 0)
     #loctyp,sta
@@ -294,13 +327,16 @@ Subprog C_LOCENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU,
     #LOT,SERNUM (dipendono da ITMREF: già imputato)
     Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOCTYP",CURRENTROW) From YAX3MUTILS
     Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STA",CURRENTROW) From YAX3MUTILS
-    Call YAX3MOB_ECRTRACE(mkstat,"Ubicazione in anagrafica") From YAX3MUTILS     #log
+    Call YAX3MOB_ECRTRACE(mkstat,"Ubicazione in anagrafica") From YAX3MLOG     #log
   Else
+    Raz YLOC, LOCTYP(CURRENTROW),LOT(CURRENTROW)
     mkstat =2
     YMESSAGE = "ATTENZIONE! Ubicazione non trovata!"
     Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE, CURRENTROW) From YAX3MUTILS
-    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MUTILS    #log
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MLOG    #log
   Endif
+
+  Call YSETSTRVALEUR(LOC,YLOC,CURRENTROW) From YAX3MUTILS
 
   #end
   Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
@@ -343,10 +379,10 @@ Subprog C_LOTENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU,
    mkstat =2
    YMESSAGE = "Attenzione! Lotto obbligatorio."
    Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
-   Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+   Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MLOG     #log
   Else
     mkstat=0
-    Call YAX3MOB_ECRTRACE(mkstat,"Lotto inserito") From  YAX3MUTILS     #log
+    Call YAX3MOB_ECRTRACE(mkstat,"Lotto inserito") From YAX3MLOG     #log
   Endif
 
   #end
@@ -393,7 +429,7 @@ Subprog C_SERNENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
     mkstat=2
     YMESSAGE = "ATTENZIONE! Matricola obbligatoria per l'art. "-ITMREF(CURRENTROW)-"!"
     Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
-    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+    Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MLOG     #log
   Else
     Columns [F:YSTS](SERNUM)
     Read [F:YSTS]STS0 = [L]ITMREF(CURRENTROW);YSERNUM
@@ -402,10 +438,10 @@ Subprog C_SERNENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
       mkstat=2
       YMESSAGE = "ATTENZIONE! Matricola già esistente, inserirne una nuova!"
       Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
-      Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From  YAX3MUTILS     #log
+      Call YAX3MOB_ECRTRACE(mkstat,YCURRFIELD-"(row"-num$(CURRENTROW+1)-")-"-"mex :"-YMESSAGE) From YAX3MLOG     #log
     Else
       mkstat=0
-      Call YAX3MOB_ECRTRACE(mkstat,"Matricola inserità e non già in anagrafica") From  YAX3MUTILS    #log
+      Call YAX3MOB_ECRTRACE(mkstat,"Matricola inserità e non già in anagrafica") From YAX3MLOG    #log
     Endif
   Endif
 
@@ -463,9 +499,14 @@ Subprog YCREA_ENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
   #init
   Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
   #parametrizzazioni iniziali :
-  YFUNC_NAME = "YSMR" : YFUNC_TYPE = "DOC" : YIMP_CODE="YSMRU" : YMEX_DOCTYPE = "Entrata Diversa"
+  YFUNC_NAME = "YSMR"
+  YFUNC_TYPE = "DOC"
+  YIMP_CODE = "YSMR" #"YSMRU"
+  YMEX_DOCTYPE = "Entrata Diversa"
 
   #business logic
+  #Controllo : ubic impostate ed articoli(se ubic  MONO)
+
   If(YIMP_CODE="YSMR")
     Gosub YFILL_YSMRCSV
   Endif
@@ -486,11 +527,11 @@ Subprog YCREA_ENT(FCY, IPTDAT, TRSFAM, YAX3MRESP, YRESPONSE, ITMREF, STU, QTYSTU
 
   If (vireblc(GYVCRENT,2)= AVOID.ACHAR)
     YMESSAGE = func YUTILS.IIF(YMESSAGE = AVOID.ACHAR, "Movimento di entrata fallito! Impossibile proseguire!", YMESSAGE)
-    Call YAX3MOB_ECRTRACE(2,YMESSAGE) From  YAX3MUTILS           #log
+    Call YAX3MOB_ECRTRACE(2,YMESSAGE) From  YAX3MLOG           #log
     YSUCCESS=1
   Else
     YMESSAGE = "Entrata diversa ("-GYVCRENT-")avvenuta con successo!"
-    Call YAX3MOB_ECRTRACE(0,YMESSAGE) From YAX3MUTILS
+    Call YAX3MOB_ECRTRACE(0,YMESSAGE) From YAX3MLOG
   Endif
   YALERT_MESSAGE -= YMESSAGE
 
@@ -616,11 +657,74 @@ $YFILL_YSMRUCSV
   Next
   #FINE creaz csv
 Return
-######################################################################################
-## Etichetta aggiunta dal supervisore (videata YSMR1) 02/07/2025 18:18:05 (ARG01)
-######################################################################################
-Subprog IB_ITMREF
+
+##################################################################################################################
+#                                               Utilità
+##################################################################################################################
+
+#**
+#* Funzione di Pulitura Riquadro YSMR
+#*
+#* @param ITMREF
+#* @param STU
+#* @param QTYSTU
+#* @param LOC
+#* @param LOCTYP
+#* @param LOT
+#* @param SERNUM
+#*!
+
+Subprog YCLEANRIQ_YSMR(YFIELDS,YCURRMSKALIAS,ITMREF,STU,QTYSTU,LOC,LOCTYP,LOT,SERNUM)
+
+  Variable Char YFIELDS()(,)
+  Value Char YCURRMSKALIAS
+  Variable Char ITMREF()()
+  Variable Char STU()()
+  Variable Decimal QTYSTU()
+  Variable Char LOC()()
+  Variable Char LOCTYP()()
+  Variable Char LOT()
+  Variable Char SERNUM()()
+
+  Local Integer YI
+  Raz ITMREF,STU,QTYSTU,LOC,LOCTYP,LOT,SERNUM
+
+  For YI=0 To func YUTILS.COUNT(ITMREF)-1
+    #Raz ITMREF(YI),STU(YI),QTYSTU(YI),LOC(YI),LOCTYP(YI),LOT(YI),SERNUM(YI)
+
+    #AFFZO
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"ITMREF",YI) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STU",YI) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"QTYSTU",YI) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOC",YI) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOCTYP",YI) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOT",YI) From YAX3MUTILS
+    Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"SERNUM",YI) From YAX3MUTILS
+
+    #CLEAN LABELS- Pulisco label
+    Call YAX3MOB_RAZLABEL(YFIELDS,"ITMREF",YI) From YAX3MUTILS
+    Call YAX3MOB_RAZLABEL(YFIELDS,"STU",YI) From YAX3MUTILS
+    Call YAX3MOB_RAZLABEL(YFIELDS,"QTYSTU",YI) From YAX3MUTILS
+    Call YAX3MOB_RAZLABEL(YFIELDS,"LOC",YI) From YAX3MUTILS
+    Call YAX3MOB_RAZLABEL(YFIELDS,"LOCTYP",YI) From YAX3MUTILS
+    Call YAX3MOB_RAZLABEL(YFIELDS,"LOT",YI) From YAX3MUTILS
+    Call YAX3MOB_RAZLABEL(YFIELDS,"SERNUM",YI) From YAX3MUTILS
+  Next
 End
 
+##########################################################################################
+#**
+#* Sub per Affzo dei campi di una riga di riquadro per Funzione YSMR
+#*!
 
-######################################################################################
+$YAFFZO_LINE_YSMR
+
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"ITMREF",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"STU",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"QTYSTU",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOC",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOCTYP",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"LOT",CURRENTROW) From YAX3MUTILS
+  Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"SERNUM",CURRENTROW) From YAX3MUTILS
+
+Return

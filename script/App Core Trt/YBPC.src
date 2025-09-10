@@ -1,0 +1,1330 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+
+#If GUSER='ADMIN' : Infbox(ACTION) : Endif
+
+  Case ACTION
+    When "OUVRE"         : Gosub OUVRE
+    When "DEBUT"         : Gosub DEBUT
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+
+Return
+
+#################################################################################
+
+$OUVRE
+Return
+
+#################################################################################
+
+$DEBUT
+  Call OUVRE_TRACE ("YAX3M - YBPC - Gestione Clienti - " - num$(date$)) From LECFIC
+  Call ECR_TRACE("# -- Gestione Clienti --- ",0) From GESECRAN
+Return
+
+################################################################################
+
+$FIN
+  Call FERME_TRACE From LECFIC
+Return
+
+#######################################################################################################################
+#######################################################################################################################
+#**
+#* Inizializzazione - NOTA: Se la finestra è composta da più  maschere, aggiungere YCURRMSK1, YCURRMSKALIAS1,...
+#*!
+
+$INIT_FILE
+
+  Local Char YWINNAME(20): YWINNAME = "YBPC"
+  Local Char YCURRMSK(20): YCURRMSK = "YBPC"           #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSK1(20): YCURRMSK1 = "<Nome>"
+  Local Char YCURRMSKALIAS(20): YCURRMSKALIAS= "YBPC"  #NOTA: Se la finestra è composta da più  maschere: Local Char YCURRMSKALIAS1(20): YCURRMSKALIAS1 = "<NomeAlias>"
+  Local Char YACTION(20)
+  Local Char YCURRFIELD(20)
+Return
+
+########################################################################################################################
+################################################ SUBPROG /FUNPROG ######################################################
+########################################################################################################################
+
+#=============================================== AZIONI-CAMPO ==========================================================
+#BPCNUM: (gestione a Barcode & QrCode)SEL,gestione se esiste già-- in modifica: controllo assenza caratteri
+
+Subprog C_BPCNBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Local File BPCUSTOMER [F:YBPC]
+  Local File BPADDRESS [F:YBPA]
+  Local File BPARTNER [F:YBPR]
+  Local Integer K,I
+  Local Integer YMODIF,YMODIF_RIQUADRO_COUNT
+  Local Char YBPCNUM(15): YBPCNUM = vireblc(BPCNUM,2)
+
+  Call OUVRE_TRACE("C_BPCNBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCBPCNBPC"
+  YCURRFIELD = "BPCNUM"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  YBPCNUM = func YAX3MCRMLIB.YVALIDATEBPC(BPCNUM)
+  Read [F:YBPC]BPC0 = YBPCNUM
+  If(fstat)
+    #Cliente nuovo
+    mkstat = 0
+    Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,"*Modalità Creazione",CURRENTROW) From YAX3MUTILS
+    Call ECR_TRACE (YBPCNUM -":"-"*Modalità Creazione Cliente",0) From GESECRAN
+
+    #pulisco videata
+    Raz BPRNAM,EECNUM,VACBPR,PTE,ACCCOD
+    Gosub YAFFZO_HEADER_YBPC
+
+    For K = 0 To func YUTILS.COUNT(BPAADD)-1
+      Raz BPAADD(K),BPAADDLIG(K),TEL(K),WEB(K),FCYWEB(K),CRY(K),POSCOD(K),CTY(K)
+
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"BPAADD",K) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"BPAADDLIG",K) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"TEL",K) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"WEB",K) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"FCYWEB",K) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"CRY",K) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"POSCOD",K) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"CTY",K) From YAX3MUTILS
+    Next
+
+    #Aggiorno (lato X3) righe Riquadro
+    Call YAX3MOB_UPDATE_NBLIG(YCURRMSKALIAS,"NBLIG",1) From YAX3MUTILS
+  Else
+    #Cliente esistente(IN MODIFICA)
+    #CONTROLLO: Cliente(esistente) compatibile con CATEGORIA
+#    If(func YCHK_BPCNUM_BCG(BPCNUM,BCGCOD)>0)
+#      mkstat = 2
+#      YMESSAGE = "Attenzione! Il cliente"-BPCNUM-"non è compatibile con la categ.("-BCGCOD-")!"
+#      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+#
+#      #pulisco videata
+#      Raz BPRNAM,EECNUM,VACBPR,PTE,ACCCOD
+#      For K = 0 To func YUTILS.COUNT(BPAADD)-1
+#        Raz BPAADD(K),BPAADDLIG(K),TEL(K),WEB(K),FCYWEB(K),CRY(K),POSCOD(K),CTY(K)
+#      Next
+#    Else
+      mkstat = 0
+      Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,"*Modalità Modifica",CURRENTROW) From YAX3MUTILS
+      Call ECR_TRACE (YBPCNUM -":"-"*Modalità Modifica Cliente",0) From GESECRAN
+
+      #pulisco videata
+      Raz BPRNAM,EECNUM,VACBPR,PTE,ACCCOD
+      For K = 0 To func YUTILS.COUNT(BPAADD)-1
+        Raz BPAADD(K),BPAADDLIG(K),TEL(K),WEB(K),FCYWEB(K),CRY(K),POSCOD(K),CTY(K)
+      Next
+
+      #LINK: estrai dati(record set) : cerco i terzi: BPATYP = 1
+      Link [YBPA] With [F:YBPC]BPC0 ~=[F:YBPA]BPANUM,
+&                 [F:YBPR]BPR0 ~=[F:YBPA]BPANUM
+&                 As [LNK] Where ([F:YBPA]BPATYP = 1 & [F:YBPC]BPCNUM = YBPCNUM)
+&                 Order By Key KEYBPA = [F:YBPA]BPANUM;[F:YBPA]BPAADD
+
+      Columns [LNK]([F:YBPC]BCGCOD,[F:YBPC]BPCNUM,[F:YBPC]BPCNAM,[F:YBPR]EECNUM,[F:YBPC]VACBPR,[F:YBPC]PTE,[F:YBPC]ACCCOD,
+&                 [F:YBPA]BPAADD,[F:YBPA]BPAADDLIG,[F:YBPA]TEL,[F:YBPA]WEB,[F:YBPA]FCYWEB,[F:YBPA]CRY,[F:YBPA]POSCOD,[F:YBPA]CTY)
+
+      Call ECR_TRACE("ROWCOUNT ="-num$(rowcount([LNK])),0) From GESECRAN
+      Call YAX3MOB_UPDATE_NBLIG(YCURRMSKALIAS,"NBLIG",rowcount([LNK])) From YAX3MUTILS
+
+      #Popolamento Campi
+      For [LNK]KEYBPA(1)
+        BCGCOD = [F:YBPC]BCGCOD
+        BPRNAM = [F:YBPC]BPCNAM
+        EECNUM = [F:YBPR]EECNUM
+        VACBPR = [F:YBPC]VACBPR
+        PTE    = [F:YBPC]PTE
+        ACCCOD = [F:YBPC]ACCCOD
+
+        Gosub YAFFZO_HEADER_YBPC
+
+        For [LNK]KEYBPA(2)
+
+           BPAADD(I)    = [F:YBPA]BPAADD
+           BPAADDLIG(I) = [F:YBPA]BPAADDLIG
+           TEL(I)       = [F:YBPA]TEL
+           WEB(I)       = [F:YBPA]WEB
+           FCYWEB(I)    = [F:YBPA]FCYWEB
+           CRY(I)       = [F:YBPA]CRY
+           POSCOD(I)    = [F:YBPA]POSCOD
+           CTY(I)       = [F:YBPA]CTY
+
+           Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"BPAADD",I) From YAX3MUTILS
+           Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"BPAADDLIG",I) From YAX3MUTILS
+           Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"TEL",I) From YAX3MUTILS
+           Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"WEB",I) From YAX3MUTILS
+           Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"FCYWEB",I) From YAX3MUTILS
+           Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"CRY",I) From YAX3MUTILS
+           Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"POSCOD",I) From YAX3MUTILS
+           Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"CTY",I) From YAX3MUTILS
+
+           #Abilito i campi di Riquadro(NUOVO!!)
+#           Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"BPAADD",I) From YAX3MUTILS
+#           Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"BPAADDLIG",I) From YAX3MUTILS
+#           Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"TEL",I) From YAX3MUTILS
+#           Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"WEB",I) From YAX3MUTILS
+#           Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"FCYWEB",I) From YAX3MUTILS
+#           Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"CRY",I) From YAX3MUTILS
+#           Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"POSCOD",I) From YAX3MUTILS
+#           Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"CTY",I) From YAX3MUTILS
+
+           I += 1
+        Next
+      Next
+
+      If(type(YMODIF)< 0 | type(YMODIF_RIQUADRO_COUNT)< 0)
+        Local Integer YMODIF,YMODIF_RIQUADRO_COUNT
+      Endif
+
+      YMODIF = 1
+      YMODIF_RIQUADRO_COUNT = I
+      Call YAX3MOB_UPDATE_NBLIG(YCURRMSKALIAS,"NBLIG",YMODIF_RIQUADRO_COUNT) From YAX3MUTILS
+    Endif
+  #Endif
+
+  BPCNUM = YBPCNUM
+Call ECR_TRACE("RIQ-COUNT ="-num$(func YUTILS.COUNT(BPAADD)),0) From GESECRAN
+  Local Integer YM
+  For YM = 0 To func YUTILS.COUNT(BPAADD)-1
+
+Call ECR_TRACE("YM ="-num$(YM),0) From GESECRAN
+    Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"BPAADD",YM) From YAX3MUTILS
+    Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"BPAADDLIG",YM) From YAX3MUTILS
+    Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"TEL",YM) From YAX3MUTILS
+    Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"WEB",YM) From YAX3MUTILS
+    Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"FCYWEB",YM) From YAX3MUTILS
+    Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"CRY",YM) From YAX3MUTILS
+    Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"POSCOD",YM) From YAX3MUTILS
+    Call YAX3MOB_ACTZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"CTY",YM) From YAX3MUTILS
+  Next
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+########################################################################################################################################
+#BCG: C, SEL_obj
+
+Subprog C_BCGBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Call OUVRE_TRACE("C_BCGBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCBCGBPC"
+  YCURRFIELD = "BCGCOD"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Local File BPCCATEG [F:YBCG]
+  Read [F:YBCG]BCG0 = BCGCOD
+
+  If fstat
+    mkstat = 2
+    YMESSAGE = "ATTENZIONE! Categoria inesistente!"
+    Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+  Else
+    mkstat = 0
+    Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,[F:YBCG]BCGDES, CURRENTROW) From YAX3MUTILS
+    #YMESSAGE = [F:YBCG]BCGDES    #In YMESSAGE metto Descrizione Categoria inserito (valido)
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#######################################################################################################
+#VACBPR: Regime IVA (d'imposta) : C, SEL-OBJ
+
+Subprog C_VACBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Local File TABVACBPR [F:YTVB]
+  Local Char YLEG(20):YLEG = "ITA"
+
+  Call OUVRE_TRACE("C_VACBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCVACBPC"
+  YCURRFIELD = "VACBPR"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  VACBPR = vireblc(VACBPR,2)
+  Read [F:YTVB]TVB0 = VACBPR;YLEG
+  If(!fstat)
+    mkstat = 0
+    #Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,[F:YTVB]SHOAXX,CURRENTROW) From YAX3MUTILS
+    Call YAX3MOB_RAZLABEL(YFIELDS,YCURRFIELD,CURRENTROW) From YAX3MUTILS
+  Else
+    mkstat = 2
+    YMESSAGE = "Attenzione! Regime IVA non in anagrafica!"
+    Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+#######################################################################################################
+#PTE:Cond. pagamento : C, SEL-OBJ
+
+Subprog C_PTEBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Local File TABPAYTERM [F:YTPT]
+  Local Char YLEG(20):YLEG = "ITA"    #legislazione
+  Local Integer YPTELIN: YPTELIN = 1  #riga condizione
+
+  Call OUVRE_TRACE("C_PTEBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCPTEBPC"
+  YCURRFIELD = "PTE"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  PTE = vireblc(PTE,2)
+  Read [F:YTPT]TPT0 = PTE;YLEG;YPTELIN
+  If(!fstat)
+    mkstat = 0
+    #Call YAX3MOB_SETLABEL(YFIELDS,YCURRFIELD,0,[F:YTPT]DESAXX,CURRENTROW) From YAX3MUTILS
+    Call YAX3MOB_RAZLABEL(YFIELDS,YCURRFIELD,CURRENTROW) From YAX3MUTILS
+  Else
+    mkstat = 2
+    YMESSAGE = "Attenzione! Cond.Pagamento non in anagrafica!"
+    Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+
+########################################################################################################
+#ACCCOD: Codice Contabile: C, SEL_OBJ
+
+Subprog C_ACCDBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Local File GACCCODE [F:YCAC]
+  Local Char YCOA(20):YCOA = "ITA"
+  Local Char YACCCOD(10)
+
+  Call OUVRE_TRACE("C_ACCDBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCACCDBPC"
+  YCURRFIELD = "ACCCOD"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  YACCCOD = vireblc(ACCCOD,2)
+  Filter [F:YCAC] Where ([F:YCAC]COA = YCOA & [F:YCAC]ACCCOD = YACCCOD)
+  If(rowcount([F:YCAC])=0)
+    mkstat = 2
+    YMESSAGE = "Attenzione! Cod.Contabile non in anagrafica!"
+    Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+  Else
+    mkstat = 0
+    Call YAX3MOB_RAZLABEL(YFIELDS,YCURRFIELD,CURRENTROW) From YAX3MUTILS
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+#######################################################################################################
+#BPAADD: C, SEL(su tabella diversa Tipolgia Indirizzi)
+
+Subprog C_BPDDGBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Local Char YBPAADD(5)
+  Call OUVRE_TRACE("C_BPDDGBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCBPDDGBPC"
+  YCURRFIELD = "BPAADD"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic: query su tabella diversa
+  Call YSTRVALEUR(BPAADD,YBPAADD,CURRENTROW) From YAX3MUTILS
+  Local File ATEXTRA [LNK]
+  #prendo lo stesso dataset della SEL
+  Gosub SET_LINK_YBPC From YAX3MSELBPAADDLNK
+  Filter [LNK] Where [LNK]IDENT2 = YBPAADD
+
+  If(rowcount([LNK])=0)
+    mkstat = 2
+    YMESSAGE = "ATTENZIONE! Tipologia Indirizzo inesistente!"
+    Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+  Else
+    mkstat = 0
+    #If(BCGCOD="IT")
+      CRY(CURRENTROW)= "IT"
+      Call YAX3MOB_DISZO_RIQUADRO(YFIELDS,YCURRMSKALIAS,"CRY",CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_AFFZO_RIQUADRO(YCURRMSKALIAS,"CRY",CURRENTROW) From YAX3MUTILS
+    #Endif
+    #YMESSAGE = [F:YBCG]BCGDES    #In YMESSAGE metto Descrizione Categoria inserito (valido)?
+  Endif
+  Filter [LNK]
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+######################################################################################################
+# TEL: C
+Subprog C_TELBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Call OUVRE_TRACE("C_TELBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCTELBPC"
+  YCURRFIELD = "TEL"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Local Char YTEL(20)
+  Call YSTRVALEUR(TEL,YTEL,CURRENTROW) From YAX3MUTILS
+  YTEL = vireblc(YTEL,4)
+  If(func YAX3MCRMLIB.YREG_TELSTRINGCHECK(YTEL)>0)
+    mkstat =2
+    YMESSAGE = "Attenzione!Il N°di telefono inserito non ha un formato corretto!"
+    Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+  Else
+    mkstat =0
+  Endif
+  Call YSETSTRVALEUR(TEL,YTEL,CURRENTROW) From YAX3MUTILS
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#######################################################################################################
+# WEB: C
+
+Subprog C_WEBBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Call OUVRE_TRACE("C_WEBBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCWEBBPC"
+  YCURRFIELD = "WEB"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Local Char YWEB(80)
+  Call YSTRVALEUR(WEB,YWEB,CURRENTROW) From YAX3MUTILS
+  YWEB = vireblc(YWEB,4)
+  mkstat =0
+  Call YSETSTRVALEUR(WEB,YWEB,CURRENTROW) From YAX3MUTILS
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#######################################################################################################
+# FCYWEB - sito web: C
+
+Subprog C_FWEBBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Call OUVRE_TRACE("C_FWEBBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCFWEBBPC"
+  YCURRFIELD = "FCYWEB"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Local Char YFCYWEB(250)
+  Call YSTRVALEUR(FCYWEB,YFCYWEB,CURRENTROW) From YAX3MUTILS
+  YFCYWEB = vireblc(YFCYWEB,4)
+  mkstat =0
+  Call YSETSTRVALEUR(FCYWEB,YFCYWEB,CURRENTROW) From YAX3MUTILS
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#######################################################################################################
+#CRY : C
+
+Subprog C_CRYBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Local Char YCRY(5)
+  Call OUVRE_TRACE("C_CRYBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCCRYBPC"
+  YCURRFIELD = "CRY"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic
+  Call YSTRVALEUR(CRY,YCRY,CURRENTROW) From YAX3MUTILS
+  Local File TABCOUNTRY [F:TCY]
+  #Local Char YCRY(3): YCRY = toupper(CRY)
+  Read [F:TCY]TCY0= toupper(YCRY)
+
+  If(fstat >0)
+    mkstat =2
+    YMESSAGE = "ATTENZIONE! Nazione inesistente!"
+    Call YAX3MOB_SHOWMESS_RIQUADRO(YFIELDS, YCURRFIELD, mkstat, YMESSAGE,CURRENTROW) From YAX3MUTILS
+  Else
+    mkstat =0
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+#######################################################################################################
+#POSCOD: C, SEL
+
+Subprog C_POSCBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Call OUVRE_TRACE("C_POSCBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCPOSCBPC"
+  YCURRFIELD = "POSCOD"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+  #business logic:
+#  Local File POSCOD [F:YPOS]
+#  Local Char YCRY(3): YCRY = CRY(CURRENTROW)
+#  Local Char YPOSCOD(10): YPOSCOD = POSCOD
+#
+#  If(YCRY ="IT")
+#    Filter [F:YPOS] Where ([F:YPOS]CRY = YCRY & [F:YPOS]POSCOD = YPOSCOD)
+#
+#    If(rowcount([F:YPOS])=0)
+#      mkstat = 2
+#      YMESSAGE = "ATTENZIONE! CAP inesistente!"
+#      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+#    Else
+      mkstat = 0
+#    Endif
+#    Filter [F:YPOS]
+#  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+###################################################################################
+#CTY: C, SEL
+
+Subprog C_CTYBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Call OUVRE_TRACE("C_CTYBPC") From LECFIC
+
+  Gosub INIT_FILE
+  YACTION = "YCCTYBPC"
+  YCURRFIELD = "CTY"
+
+  #init
+  Gosub YAX3MOB_INIT_ACTIONFIELD From YAX3MUTILS
+
+
+  #business logic:
+#  Local File POSCOD [F:YPOS]
+#  Local Char YCRY(3): YCRY = CRY(CURRENTROW)
+#  Local Char YPOSCOD(10): YPOSCOD = POSCOD(CURRENTROW)
+#
+#  If(YCRY ="IT")
+#    Filter [F:YPOS] Where ([F:YPOS]CRY = YCRY & [F:YPOS]POSCOD = YPOSCOD & [F:YPOS]POSCTY=CTY)
+#
+#    If(rowcount([F:YPOS])=0)
+#      mkstat = 2
+#      YMESSAGE = "ATTENZIONE! Città inesistente!"
+#      Call YAX3MOB_SHOWMESS(YFIELDS, YCURRFIELD, mkstat, YMESSAGE) From YAX3MUTILS
+#    Else
+      mkstat = 0
+#    Endif
+#    Filter [F:YPOS]
+#  Endif
+
+  #end
+  Gosub YAX3MOB_END_ACTIONFIELD_NOFOCUS From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+End
+
+########################################################################################################
+#                              BOTTONE DI FINESTRA
+########################################################################################################
+
+Subprog YCREA_BPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YAX3MRESP,YRESPONSE,BPAADD,BPAADDLIG,TEL,WEB,FCYWEB,CRY,POSCOD,CTY)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Value Clbfile YAX3MRESP
+  Variable Clbfile YRESPONSE
+
+  Variable Char BPAADD()
+  Variable Char BPAADDLIG()
+  Variable Char CRY()
+  Variable Char TEL()
+  Variable Char WEB()
+  Variable Char FCYWEB()
+  Variable Char POSCOD()
+  Variable Char CTY()
+
+  Local Integer K, YSUCCESS : YSUCCESS = 0
+
+  #apertura traccia
+  Call OUVRE_TRACE("YCREA_BPC") From LECFIC
+  Gosub INIT_FILE
+  YACTION = "YCREABPC"
+  YCURRFIELD = ""
+
+  #init
+  Gosub YAX3MOB_INIT_BUTTONACTION From YAX3MUTILS
+  #parametrizzazioni iniziali (contestuali)
+  YFUNC_NAME = "YBPC"
+  YFUNC_TYPE = "DOC"
+  YIMP_CODE = "YBPC1"        #"YBPC"
+  YMEX_DOCTYPE = "Gestione Cliente"
+
+  #business logic
+  Local Integer YMODIF_MODE  # =0 : Creaz, =1 Modifica
+  Local Char YBPC_ACTION(10)
+
+  #Controllo campi Testata
+  Call YCHKHEADER_YBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YSUCCESS,YMESSAGE)
+  If(YSUCCESS >0)
+    Call ECR_TRACE("Controllo TESTATA YBPC :"-YMESSAGE,0) From GESECRAN
+    YALERT_MESSAGE -= YMESSAGE
+    Call YAX3MOB_SHOWALERT(2, YALERT_TYPE, YALERT_MESSAGE) From YAX3MUTILS
+  Else
+    Local Integer YRES
+    Call YCHECK_BPRCRE(BPCNUM,YRES)
+    YMODIF_MODE = func YUTILS.IIF(YRES >0,0,1)
+    YBPC_ACTION = func YUTILS.STR_IIF(YMODIF_MODE = 0, "Creazione", "Modifica")
+  Endif
+
+  #crea Terzo tramite modello di Import
+#  Local Clbfile YCSVTEXT0(2)
+#  Local Integer YTERZOEXIST
+#  Call YCHECK_BPCCRE(BPCNUM,YTERZOEXIST)
+#  #terzo non esiste, lo creo
+#  If(YTERZOEXIST = 1)
+#    Gosub YCSVBPR_FILL
+#    Call YPRINT_CLB(YCSVTEXT0,YFUNC_NAME-"YBPR", "csv") From YUTILS                           #stampo CSV(opzionale)
+#    Call YAX3MOB_IMPORTSIL("YBPR", YCSVTEXT0, YSUCCESS, YMESSAGE) From YAX3MUTILS
+#    Call YCHECK_BPCCRE(BPCNUM,YTERZOEXIST)                                               #Verifica/esito Creazione Cliente
+#    If(YTERZOEXIST = 1)
+#      YSUCCESS = 1
+#      YMESSAGE = "Attenzione! Creazione terzo" - BPCNUM - "fallita!"
+#    Else
+#      YSUCCESS = 0
+#      YMESSAGE = "Creazione terzo" - BPCNUM - "avvenuta con successo!"
+#    Endif
+#  Endif
+
+#####################
+
+#  If(BCG <> "EU")
+#
+#    Gosub YCSVBPR_FILL
+#    Call YPRINT_CLB(YCSVTEXT0,YFUNC_NAME-"BPR", "csv") From YUTILS                           #stampo CSV(opzionale)
+#    #TODO:Check correttezza codice Modello import impostato?
+#    Call YAX3MOB_IMPORTSIL("BPR", YCSVTEXT0, YSUCCESS, YMESSAGE) From YAX3MUTILS
+#    Call YCHECK_BPRCRE(BPCNUM,YSUCCESS)                                               #Verifica/esito Creazione Cliente
+#
+##    If(YSUCCESS<>2)
+##     YMESSAGE = "Creazione terzo" - BPCNUM - "avvenuta con successo!"
+##Infbox "terzo :"-YMESSAGE
+##    Endif
+#  Endif
+
+  If(YSUCCESS=0)
+    #Gosub YFILL_YBPCCSV
+    Gosub YFILL_YBPCCSV1
+
+    Call YPRINT_CLB(YCSVTEXT,YFUNC_NAME, "csv") From YUTILS                           #stampo CSV(opzionale)
+    #TODO:Check correttezza codice Modello import impostato?
+    Call YAX3MOB_IMPORTSIL(YIMP_CODE, YCSVTEXT, YSUCCESS, YMESSAGE) From YAX3MUTILS
+
+    #YMODIF_MODE  # =0 : Creaz, =1 Modifica
+    If(YMODIF_MODE = 0)
+      Call YCHECK_BPRCRE(BPCNUM,YSUCCESS)
+    Else
+      If(vireblc(func YAX3MUTILS.YAX3MOBGET_TRACE(GTRACE),2) <> AVOID.ACHAR)
+        YSUCCESS = 1
+      Endif
+    Endif
+
+    #Verifica/esito Creazione Cliente
+    If(YSUCCESS>0)
+      YMESSAGE = func YUTILS.IIF(YMESSAGE = AVOID.ACHAR, "Movimento di" -YBPC_ACTION- "cliente fallito! Impossibile proseguire!", YMESSAGE)
+    Else
+      YMESSAGE = YBPC_ACTION-"cliente" - BPCNUM - "avvenuta con successo!"
+    Endif
+    YALERT_MESSAGE -= YMESSAGE
+ Call ECR_TRACE(YMESSAGE,0) From GESECRAN  # metti nel LOG AX3M
+
+    If(YSUCCESS = 1)
+      Call YAX3MOB_SHOWALERT(2, YALERT_TYPE, YALERT_MESSAGE) From YAX3MUTILS
+    Else
+      Raz BCGCOD,BPCNUM,BPRNAM,EECNUM,VACBPR,PTE,ACCCOD
+
+      Call YAX3MOB_RAZLABEL(YFIELDS,"BCGCOD",CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_RAZLABEL(YFIELDS,"BPCNUM",CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_RAZLABEL(YFIELDS,"BPRNAM",CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_RAZLABEL(YFIELDS,"EECNUM",CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_RAZLABEL(YFIELDS,"VACBPR",CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_RAZLABEL(YFIELDS,"PTE",CURRENTROW) From YAX3MUTILS
+      Call YAX3MOB_RAZLABEL(YFIELDS,"ACCCOD",CURRENTROW) From YAX3MUTILS
+
+      For K = 0 To func YUTILS.COUNT(BPAADD) - 1
+        #Raz BPAADD(K),BPAADDLIG(K),CRY(K),POSCOD(K),CTY(K) #dettaglio
+        Raz BPAADD(K),BPAADDLIG(K),TEL(K),WEB(K),FCYWEB(K),CRY(K),POSCOD(K),CTY(K)
+
+        Call YAX3MOB_RAZRIQUADRO(YFIELDS,YCURRMSKALIAS) From YAX3MUTILS
+        Call YAX3MOB_RAZMESSAGES(YFIELDS)From YAX3MUTILS
+      Next
+      Call YAX3MOB_SHOWALERT(1, YALERT_TYPE, YALERT_MESSAGE) From YAX3MUTILS
+    Endif
+  Endif
+
+  #end
+  Gosub YAX3MOB_END_BUTTONACTION From YAX3MUTILS
+  Call FERME_TRACE From LECFIC
+
+End
+
+######################################################################################################
+######################################################################################################
+#**
+#* Sub per riempimento contenuto csv per Modello di Import Creazione Cliente
+#*!
+
+$YFILL_YBPCCSV
+
+  #INIZIO creaz csv
+  Call YAX3MOB_APPEND(YCSVTEXT, "B", 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, "EU", 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, BPCNUM, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, BPRNAM, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS  #bprsho
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS  #bprlog
+  Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS         #bpainv
+  Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS         #bpapyr
+
+  Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS #bpaadd
+#Call YAX3MOB_APPEND(YCSVTEXT, BPAADD(0), 0) From YAX3MUTILS #bpaadd
+#  If(func YUTILS.COUNT(BPAADD)>0)
+#   Call YAX3MOB_APPEND(YCSVTEXT, BPAADD(0), 0) From YAX3MUTILS #bpaadd
+#  Else
+#    Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS #bpaadd
+#  Endif
+
+  Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS #bpdadd
+
+  Call YAX3MOB_APPEND(YCSVTEXT, "EUR", 0) From YAX3MUTILS           #cur
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #crn
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #naf
+  Call YAX3MOB_APPEND(YCSVTEXT, EECNUM, 0) From YAX3MUTILS          #eecnum
+  Call YAX3MOB_APPEND(YCSVTEXT, BPCNUM, 0) From YAX3MUTILS          #bpcinv = bpcnum
+  Call YAX3MOB_APPEND(YCSVTEXT, "VCE", 0) From YAX3MUTILS           #vacbpr
+  Call YAX3MOB_APPEND(YCSVTEXT, "ITBON30GGFM", 0) From YAX3MUTILS   #pte
+  Call YAX3MOB_APPEND(YCSVTEXT, "ITUE", 0) From YAX3MUTILS          #acccod
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #tsccod0
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 1) From YAX3MUTILS     #tsccod1
+
+#Call ECR_TRACE("NUM addr= "-num$(func YUTILS.COUNT(BPAADD)),0) From GESECRAN
+
+  Local Integer I,J : I = 0 : J = 0
+  For I=0 To func YUTILS.COUNT(BPAADD) - 1
+    # Row A
+    Call YAX3MOB_APPEND(YCSVTEXT, "A", 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, BPAADD(I), 0) From YAX3MUTILS       #bpsadd
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #bpades
+    Call YAX3MOB_APPEND(YCSVTEXT, BPAADDLIG(I), 0) From YAX3MUTILS    #bpaaddlig
+    Call YAX3MOB_APPEND(YCSVTEXT, POSCOD(I), 0) From YAX3MUTILS       #poscod
+    Call YAX3MOB_APPEND(YCSVTEXT, CTY(I), 0) From YAX3MUTILS          #cty
+    Call YAX3MOB_APPEND(YCSVTEXT, CRY(I), 0) From YAX3MUTILS          #cry
+    Call YAX3MOB_APPEND(YCSVTEXT, "0542 619234", 1) From YAX3MUTILS   #tel
+  Next
+  #FINE creaz csv
+Return
+
+##########################################################
+$YFILL_YBPCCSV1
+
+  #INIZIO creaz csv
+  Call YAX3MOB_APPEND(YCSVTEXT, "B", 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, BCGCOD, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, BPCNUM, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, BPRNAM, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS  #bprsho
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS  #bprlog
+  Call YAX3MOB_APPEND(YCSVTEXT, "ITA", 0) From YAX3MUTILS        #LAN
+  Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS         #bpainv
+  Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS         #bpapyr
+
+  #Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS #bpaadd
+#Call YAX3MOB_APPEND(YCSVTEXT, BPAADD(0), 0) From YAX3MUTILS #bpaadd
+#
+  If(func YUTILS.COUNT(BPAADD)>0)
+   Call YAX3MOB_APPEND(YCSVTEXT, BPAADD(0), 0) From YAX3MUTILS #bpaadd
+  Else
+    Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS #bpaadd
+  Endif
+
+  Call YAX3MOB_APPEND(YCSVTEXT, "SL", 0) From YAX3MUTILS #bpdadd
+
+  Call YAX3MOB_APPEND(YCSVTEXT, "EUR", 0) From YAX3MUTILS           #cur
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #crn
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #naf
+  Call YAX3MOB_APPEND(YCSVTEXT, EECNUM, 0) From YAX3MUTILS          #eecnum
+  Call YAX3MOB_APPEND(YCSVTEXT, BPCNUM, 0) From YAX3MUTILS          #bpcinv = bpcnum
+
+  #Call YAX3MOB_APPEND(YCSVTEXT, "VCE", 0) From YAX3MUTILS           #vacbpr
+  Call YAX3MOB_APPEND(YCSVTEXT, VACBPR, 0) From YAX3MUTILS           #vacbpr
+
+  #Call YAX3MOB_APPEND(YCSVTEXT, "ITBON30GGFM", 0) From YAX3MUTILS   #pte
+  Call YAX3MOB_APPEND(YCSVTEXT, PTE, 0) From YAX3MUTILS   #pte
+
+  #Call YAX3MOB_APPEND(YCSVTEXT, "ITUE", 0) From YAX3MUTILS          #acccod
+  Call YAX3MOB_APPEND(YCSVTEXT, ACCCOD, 0) From YAX3MUTILS          #acccod
+
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #tsccod0
+  Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #tsccod1
+  Call YAX3MOB_APPEND(YCSVTEXT, BPCNUM, 0) From YAX3MUTILS          #BPCPYR (AGGIUNTO!)
+  Call YAX3MOB_APPEND(YCSVTEXT, BPCNUM, 1) From YAX3MUTILS          #BPCRSK (AGGIUNTO!)
+
+  Local Integer I,J : I = 0 : J = 0
+  For I=0 To func YUTILS.COUNT(BPAADD) - 1
+    # Row A
+    Call YAX3MOB_APPEND(YCSVTEXT, "A", 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT, BPAADD(I), 0) From YAX3MUTILS       #bpsadd
+    Call YAX3MOB_APPEND(YCSVTEXT, AVOID.ACHAR, 0) From YAX3MUTILS     #bpades
+    Call YAX3MOB_APPEND(YCSVTEXT, BPAADDLIG(I), 0) From YAX3MUTILS    #bpaaddlig
+    Call YAX3MOB_APPEND(YCSVTEXT, POSCOD(I), 0) From YAX3MUTILS       #poscod
+    Call YAX3MOB_APPEND(YCSVTEXT, CTY(I), 0) From YAX3MUTILS          #cty
+    Call YAX3MOB_APPEND(YCSVTEXT, CRY(I), 0) From YAX3MUTILS          #cry
+
+    Call YAX3MOB_APPEND(YCSVTEXT, TEL(I), 0) From YAX3MUTILS          #tel
+    Call YAX3MOB_APPEND(YCSVTEXT, WEB(I), 0) From YAX3MUTILS          #mail (web)
+    Call YAX3MOB_APPEND(YCSVTEXT, FCYWEB(I), 1) From YAX3MUTILS       #sitoweb (fcyweb)
+  Next
+  #FINE creaz csv
+Return
+
+
+######################################################################################################
+#**
+#* Sub per riempimento contenuto csv per Modello di Import Creazione Terzo
+#*!
+
+#$YCSVBPR_FILL
+#
+#  #INIZIO creaz csv
+#  Call YAX3MOB_APPEND(YCSVTEXT0, "B", 0) From YAX3MUTILS
+#  Call YAX3MOB_APPEND(YCSVTEXT0, BPCNUM, 0) From YAX3MUTILS
+#  Call YAX3MOB_APPEND(YCSVTEXT0, BPRNAM, 0) From YAX3MUTILS
+#  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #bprsho
+#  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #bprlog
+#  Call YAX3MOB_APPEND(YCSVTEXT0, "ITA", 0) From YAX3MUTILS  #lan
+#  Call YAX3MOB_APPEND(YCSVTEXT0, "EUR", 0) From YAX3MUTILS  #cur
+#  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #crn
+#  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #naf
+#  Call YAX3MOB_APPEND(YCSVTEXT0, EECNUM, 0) From YAX3MUTILS   #eecnum
+#  Call YAX3MOB_APPEND(YCSVTEXT0, num$(1), 0) From YAX3MUTILS   #bpracc
+#  Call YAX3MOB_APPEND(YCSVTEXT0, "ITUE", 1) From YAX3MUTILS  #acccod
+#
+##Call ECR_TRACE("NUM addr= "-num$(func YUTILS.COUNT(BPAADD)),0) From GESECRAN
+#  Local Integer I,J : I = 0 : J = 0
+#  For I=0 To func YUTILS.COUNT(BPAADD) - 1
+#    # Row B
+#    Call YAX3MOB_APPEND(YCSVTEXT0, "A", 0) From YAX3MUTILS
+#    Call YAX3MOB_APPEND(YCSVTEXT0, BPAADD(I), 0) From YAX3MUTILS  #bpaadd
+#    Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS #bpades
+#    Call YAX3MOB_APPEND(YCSVTEXT0, BPAADDLIG(I), 0) From YAX3MUTILS  #bpaaddlig
+#    Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #bpaaddlig
+#    Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #bpaaddlig
+#    Call YAX3MOB_APPEND(YCSVTEXT0, POSCOD(I), 0) From YAX3MUTILS     #poscod
+#    Call YAX3MOB_APPEND(YCSVTEXT0, CTY(I), 0) From YAX3MUTILS        #cty
+#    Call YAX3MOB_APPEND(YCSVTEXT0, CRY(I), 0) From YAX3MUTILS        #cry
+#    Call YAX3MOB_APPEND(YCSVTEXT0, "0542 619234", 0) From YAX3MUTILS   #tel
+#    Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 1) From YAX3MUTILS   #fax
+#  Next
+#  #FINE creaz csv
+#Return
+
+
+$YCSVBPR_FILL
+
+  #INIZIO creaz csv
+  Call YAX3MOB_APPEND(YCSVTEXT0, "B", 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT0, BPCNUM, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT0, BPRNAM, 0) From YAX3MUTILS
+  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #bprsho
+  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #bprlog
+  Call YAX3MOB_APPEND(YCSVTEXT0, "ITA", 0) From YAX3MUTILS  #lan
+  Call YAX3MOB_APPEND(YCSVTEXT0, "EUR", 0) From YAX3MUTILS  #cur
+  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #crn
+  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #naf
+  Call YAX3MOB_APPEND(YCSVTEXT0, EECNUM, 0) From YAX3MUTILS   #eecnum
+  Call YAX3MOB_APPEND(YCSVTEXT0, num$(1), 0) From YAX3MUTILS   #bpracc
+  Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 1) From YAX3MUTILS  #acccod
+  #Call YAX3MOB_APPEND(YCSVTEXT0, BPAADD(0), 1) From YAX3MUTILS  #BPAADD -YBPR
+
+#Call ECR_TRACE("NUM addr= "-num$(func YUTILS.COUNT(BPAADD)),0) From GESECRAN
+  Local Integer I,J : I = 0 : J = 0
+  For I=0 To func YUTILS.COUNT(BPAADD) - 1
+    # Row B
+    Call YAX3MOB_APPEND(YCSVTEXT0, "A", 0) From YAX3MUTILS
+    Call YAX3MOB_APPEND(YCSVTEXT0, BPAADD(I), 0) From YAX3MUTILS  #bpaadd
+    Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS #bpades
+    Call YAX3MOB_APPEND(YCSVTEXT0, BPAADDLIG(I), 0) From YAX3MUTILS  #bpaaddlig
+    Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #bpaaddlig
+    Call YAX3MOB_APPEND(YCSVTEXT0, AVOID.ACHAR, 0) From YAX3MUTILS  #bpaaddlig
+    Call YAX3MOB_APPEND(YCSVTEXT0, POSCOD(I), 0) From YAX3MUTILS     #poscod
+    Call YAX3MOB_APPEND(YCSVTEXT0, CTY(I), 0) From YAX3MUTILS        #cty
+    Call YAX3MOB_APPEND(YCSVTEXT0, CRY(I), 0) From YAX3MUTILS        #cry
+    Call YAX3MOB_APPEND(YCSVTEXT0, TEL, 0) From YAX3MUTILS   #tel
+    If (I=0)
+      Call YAX3MOB_APPEND(YCSVTEXT0, num$(2), 1) From YAX3MUTILS   #INDIRIZZO DI DEFAULT
+    Else
+      Call YAX3MOB_APPEND(YCSVTEXT0, num$(1), 1) From YAX3MUTILS   #INDIRIZZO DI DEFAULT
+    Endif
+  Next
+  #FINE creaz csv
+Return
+
+########################################################################################################
+#                                             Utilità
+########################################################################################################
+#**
+#* Metodo per Controllo Creazione Terzo in Anagrafica (se esiste = 0, altrimenti =1)
+#*
+#* @param BPCNUM Codice Cliente
+#* @param YSUCCESS Booleano per successo/insuccesso
+#*!
+
+Subprog YCHECK_BPCCRE(BPCNUM,YSUCCESS)
+
+  Value Char BPCNUM
+  Variable Integer YSUCCESS
+
+  Local File BPARTNER [F:YBPR]
+  Read [F:YBPR]BPR0=toupper(BPCNUM)
+  If(fstat>0)
+    YSUCCESS=1
+  Endif
+End
+
+##########################################################################
+#**
+#* Metodo per Controllo Creazione Cliente in Anagrafica
+#*
+#* @param BPCNUM Codice Cliente
+#* @param YSUCCESS Booleano per successo /insuccesso
+#*!
+
+Subprog YCHECK_BPRCRE(BPCNUM,YSUCCESS)
+
+  Value Char BPCNUM
+  Variable Integer YSUCCESS
+
+  Local File BPCUSTOMER [F:YBPC]
+  Read [F:YBPC]BPC0=toupper(BPCNUM)
+  If(fstat>0)
+    YSUCCESS=1
+  Endif
+End
+
+#############################################################################
+#**
+#* Metodo per Controllo TESTATA YBPC pre lancio azione Bottone di Finestra
+#*
+#* @param BPCNUM
+#* @param BPRNAM
+#* @param BCGCOD
+#* @param EECNUM
+#* @param VACBPR
+#* @param PTE
+#* @param ACCCOD
+#* @param YSUCCESS
+#* @param YMESSAGE
+#*!
+
+Subprog YCHKHEADER_YBPC(BPCNUM,BPRNAM,BCGCOD,EECNUM,VACBPR,PTE,ACCCOD,YSUCCESS,YMESSAGE)
+
+  Variable Char BPCNUM
+  Variable Char BPRNAM
+  Variable Char BCGCOD
+  Variable Char EECNUM
+  Variable Char VACBPR
+  Variable Char PTE
+  Variable Char ACCCOD
+
+  Variable Integer YSUCCESS
+  Variable Char YMESSAGE
+
+  YSUCCESS = func YUTILS.IIF(vireblc(BPCNUM,2)<> AVOID.ACHAR,0,2)
+  If(YSUCCESS >0)
+    YMESSAGE = "Attenzione! Campo Codice Cliente non imputato!"
+    End
+  Endif
+
+  YSUCCESS = func YUTILS.IIF(vireblc(BCGCOD,2)<> AVOID.ACHAR,0,2)
+  If(YSUCCESS >0)
+    YMESSAGE = "Attenzione! Campo Categoria Cliente non imputata!"
+    End
+  Endif
+
+  YSUCCESS = func YUTILS.IIF(vireblc(BCGCOD,2)<> AVOID.ACHAR,0,2)
+  If(YSUCCESS >0)
+    YMESSAGE = "Attenzione! campo Categoria Cliente non imputata!"
+    End
+  Endif
+
+  YSUCCESS = func YUTILS.IIF(vireblc(EECNUM,2)<> AVOID.ACHAR,0,2)
+  If(YSUCCESS >0)
+    YMESSAGE = "Attenzione! Campo IVA non imputato!"
+    End
+  Endif
+
+  YSUCCESS = func YUTILS.IIF(vireblc(VACBPR,2)<> AVOID.ACHAR,0,2)
+  If(YSUCCESS >0)
+    YMESSAGE = "Attenzione! Campo Regime IVA non imputato!"
+    End
+  Endif
+
+  YSUCCESS = func YUTILS.IIF(vireblc(VACBPR,2)<> AVOID.ACHAR,0,2)
+  If(YSUCCESS >0)
+    YMESSAGE = "Attenzione! Campo Mod. pagamento non imputato!"
+    End
+  Endif
+
+  YSUCCESS = func YUTILS.IIF(vireblc(VACBPR,2)<> AVOID.ACHAR,0,2)
+  If(YSUCCESS >0)
+    YMESSAGE = "Attenzione! Campo Cod.Contabile non imputato!"
+    End
+  Endif
+End
+
+##############################################################################
+#**
+#* Sub per Aggiornamento (lato X3) campi Testata YBPC
+#*!
+
+$YAFFZO_HEADER_YBPC
+
+   Call YAX3MOB_AFFZO(YCURRMSKALIAS,"BPCNUM") From YAX3MUTILS
+   Call YAX3MOB_AFFZO(YCURRMSKALIAS,"BPRNAM") From YAX3MUTILS
+   Call YAX3MOB_AFFZO(YCURRMSKALIAS,"BCGCOD") From YAX3MUTILS
+   Call YAX3MOB_AFFZO(YCURRMSKALIAS,"EECNUM") From YAX3MUTILS
+   Call YAX3MOB_AFFZO(YCURRMSKALIAS,"VACBPR") From YAX3MUTILS
+   Call YAX3MOB_AFFZO(YCURRMSKALIAS,"PTE") From YAX3MUTILS
+   Call YAX3MOB_AFFZO(YCURRMSKALIAS,"ACCCOD") From YAX3MUTILS
+
+Return
+
+##############################################################################
+#**
+#* Funzione per controllo Compatibilità tra BPCNUM e BCGCOD(Categ).
+#* Ritorna : 2 se non compatibile, 0 se compatibile
+#*
+#* @param YBPCNUM Cod.Cliente
+#* @param YBCGCOD Categoria Cliente
+#*!
+Funprog YCHK_BPCNUM_BCG(YBPCNUM,YBCGCOD)
+
+  Value Char YBPCNUM
+  Value Char YBCGCOD
+  Local Integer YRES
+  Local File BPCUSTOMER [F:YBPC]
+
+  Filter [F:YBPC] Where ([F:YBPC]BPCNUM = YBPCNUM & [F:YBPC]BCGCOD = YBCGCOD)
+  If (rowcount([F:YBPC])= 0)
+    YRES = 2
+  Endif
+  Filter [F:YBPC]
+
+End YRES
