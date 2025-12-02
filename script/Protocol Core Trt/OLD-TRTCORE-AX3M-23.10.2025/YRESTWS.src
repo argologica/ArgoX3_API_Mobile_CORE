@@ -1,0 +1,110 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#**
+#* Funzionalità per esecuzione servizio REST
+#*
+#* @param HTTP_METHOD Verbo richiesta (GET, POST, PUT, PATCH, DELETE)
+#* @param NAME Nome Servizio REST X3
+#* @param CONTROLLER Nome Controller
+#* @param ACTION Nome Azione
+#* @param CDATA Body richiesta REST
+#* @param YRESPONSE Output response (status, message)
+#*!
+Subprog EXEC(NAME, HTTP_METHOD, CONTROLLER, ACTION, PCOD, PVAL, CDATA, RESBODY)
+
+  Value Char NAME
+  Value Char HTTP_METHOD
+  Value Char CONTROLLER
+  Value Char ACTION
+  Value Char PCOD()()
+  Value Char PVAL()()
+  Value Clbfile CDATA
+  Variable Clbfile RESBODY
+
+  Gosub EXEC_REST
+
+  #Inizio traccia
+  Call OUVRE_TRACE("Esecuzione endpoint: " + CONTROLLER + ACTION ) From LECFIC
+
+  TYPE_TRACE = func YUTILS.IIF(RETVAL = SUCCESS, -1, 1)
+
+  #lo disabilito perchè ci son dati sensibili
+  Call ECR_TRACE ("Body request:", TYPE_TRACE) From GESECRAN
+  For I = 0 To dim(REQBODY_ARR) - 1
+    Call ECR_TRACE (REQBODY_ARR(I), TYPE_TRACE) From GESECRAN
+  Next
+
+  Call ECR_TRACE ("Response status code:" - num$(RETVAL), TYPE_TRACE) From GESECRAN
+
+  Local Char RESHEAD_ARR(250)(int(len(RESHEAD) / 250) + 1)
+  Call ECR_TRACE ("Header response:", TYPE_TRACE) From GESECRAN
+  Call YCLB2STRARR(RESHEAD, RESHEAD_ARR) From YUTILS
+  For I = 0 To dim(RESHEAD_ARR) - 1
+    Call ECR_TRACE (RESHEAD_ARR(I), TYPE_TRACE) From GESECRAN
+  Next
+
+  Local Char RESBODY_ARR(250)(int(len(RESBODY) / 250) + 1)
+  #LO DISABILITO PERCHÈ CI SON DATI SENSIBILI
+  Call ECR_TRACE ("Body response:", TYPE_TRACE)  From GESECRAN
+  Call YCLB2STRARR(RESBODY, RESBODY_ARR) From YUTILS
+  For I = 0 To dim(RESBODY_ARR) - 1
+    Call ECR_TRACE (RESBODY_ARR(I), TYPE_TRACE) From GESECRAN
+  Next
+
+  Call FERME_TRACE From LECFIC
+
+End
+
+#**
+#* Funzionalità per esecuzione servizio REST
+#*
+#* @param HTTP_METHOD Verbo richiesta (GET, POST, PUT, PATCH, DELETE)
+#* @param NAME Nome Servizio REST X3
+#* @param CONTROLLER Nome Controller
+#* @param ACTION Nome Azione
+#* @param CDATA Body richiesta REST
+#* @param YRESPONSE Output response (status, message)
+#*!
+Subprog EXEC_NOTRACE(NAME, HTTP_METHOD, CONTROLLER, ACTION, PCOD, PVAL, CDATA, RESBODY)
+
+  Value Char NAME
+  Value Char HTTP_METHOD
+  Value Char CONTROLLER
+  Value Char ACTION
+  Value Char PCOD()()
+  Value Char PVAL()()
+  Value Clbfile CDATA
+  Variable Clbfile RESBODY
+
+  Gosub EXEC_REST
+
+End
+
+$EXEC_REST
+
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Local Char HCOD(100)(1..10),HVAL(100)(1..10)
+  Local Char SUBURL(len(CONTROLLER) + len(ACTION) + 5)
+  If CONTROLLER <> AVOID.ACHAR
+    SUBURL += CONTROLLER
+  Endif
+  If ACTION <> AVOID.ACHAR
+    SUBURL += ACTION
+  Endif
+
+  Local Clbfile RESHEAD(0)
+  Local Integer RETVAL, I
+
+  #inizializzo header request
+  HCOD(1)="Accept-Language"
+  HVAL(1)='"it,it-IT;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"'
+  HCOD(2)="Content-Type"
+  HVAL(2)='"application/json"'
+
+  Local Char REQBODY_ARR(250)(int(len(CDATA) / 250) + 1)
+  Call YCLB2STRARR(CDATA, REQBODY_ARR) From YUTILS
+
+  RETVAL=func ASYRRESTCLI.EXEC_REST_WS(NAME, HTTP_METHOD, SUBURL, PCOD, PVAL, HCOD, HVAL, CDATA, 0, "", RESHEAD, RESBODY)
+
+Return

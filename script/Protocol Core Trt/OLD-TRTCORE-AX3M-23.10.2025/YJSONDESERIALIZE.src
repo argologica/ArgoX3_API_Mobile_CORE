@@ -1,0 +1,584 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#################################################################################################################################
+#                                             LIBRERIA PER DESERIALIZZAZIONE
+#################################################################################################################################
+
+Subprog JSONPARSE(YBODY, YRESPONSE)
+  Variable Clbfile YBODY
+  Variable Char YRESPONSE()(,)
+
+  Local Integer PPROGRESS:PPROGRESS=1
+  Local Char WERRMSG(100)
+  Local Char YELEMENTTREE(250)(0..func F_DEEPLEVEL() )
+  Local Char YELECOUNTER(250)(func F_MAXELEMENT(), func F_DEEPLEVEL() + 1)
+
+  Call JSONPARSE_CLB(YBODY,PPROGRESS,YELEMENTTREE,YELECOUNTER,WERRMSG,YRESPONSE)
+End
+
+############################################################################################################
+Subprog JSONPARSE_CLB(YDOC, PPROGRESS, YELEMENTTREE, YELECOUNTER, WERRMSG, YRESPONSE)
+  Variable Clbfile YDOC
+  Value Integer PPROGRESS
+  Variable Char YELEMENTTREE
+  Variable Char YELECOUNTER
+  Variable Char WERRMSG
+  Variable Char YRESPONSE()(,)
+
+  Local Integer I
+  Local Char YCH(1)
+  Local Integer YCOUNT, YSTOP
+
+  Local Char YA_STATUS(20)
+  Local Char YCURR_ELEMENT_NAME(50)
+  Local Char YCURR_ELEMENT_VALUE(250)
+  Local Integer INTERRUPT
+
+  Local Integer IN_STRING
+  Local Char YPREV_CH(1)
+
+  If PPROGRESS = [V]CST_AYES Then
+    Call OUVRE_BOITE("JSON Parsing ", len(YDOC)) From GESECRAN : # Set Progress Bar
+    Call SET_BOITE("JSON Parsing", len(YDOC)) From GESECRAN
+  Endif
+
+  IN_STRING = 0
+  Raz YPREV_CH
+
+  For I = 1 To len(YDOC)
+    YCH = mid$(YDOC,I,1)
+
+    # Gestione delle stringhe e degli escape
+    If YCH = '"' and YPREV_CH <> '\' Then
+      IN_STRING = not IN_STRING
+      If IN_STRING Then
+        If YA_STATUS = "" Then
+          YA_STATUS = "ELEMENT_NAME"
+        Endif
+      Elsif YA_STATUS = "ELEMENT_NAME" Then
+        Call APPEND_T0_TREEELEMENT(YELEMENTTREE, YELECOUNTER, YCURR_ELEMENT_NAME, YCOUNT)
+        YA_STATUS = ""
+      Endif
+    Endif
+
+    If not IN_STRING Then
+      If YCH = "{" Then
+        Raz [L]YCURR_ELEMENT_VALUE
+        Raz YCURR_ELEMENT_NAME
+        YA_STATUS = ""
+      Elsif YCH = ":" Then
+        YA_STATUS = "ELEMENT_VALUE"
+      Elsif YCH = "," Then
+        If YCURR_ELEMENT_NAME <> "" Then
+          Raz YCOUNT
+          YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
+          Call RAISE_END_ELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP, YRESPONSE )
+          If YSTOP = 1 Then
+              Break
+          Endif
+          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
+          If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+          YA_STATUS = ""
+          Raz [L]YCURR_ELEMENT_VALUE
+          Raz YCURR_ELEMENT_NAME
+        Endif
+      Elsif YCH = "}" and YA_STATUS = "ELEMENT_VALUE" Then
+        If YCURR_ELEMENT_NAME <> "" Then
+          Raz YCOUNT
+          YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
+          Call RAISE_END_ELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP, YRESPONSE )
+          If YSTOP = 1 Then
+              Break
+          Endif
+          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_AYES, WERRMSG)
+          If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+        Else
+          Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
+          If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+        Endif
+
+        YA_STATUS = ""
+        Raz [L]YCURR_ELEMENT_VALUE
+        Raz YCURR_ELEMENT_NAME
+      Elsif YCH = "}" Then
+        Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
+        If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+      Elsif YCH = "[" Then
+      Elsif YCH = "]" and YA_STATUS = "" Then
+        Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
+        If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+      Else
+        If YA_STATUS = "ELEMENT_NAME" Then
+          YCURR_ELEMENT_NAME += YCH
+        Elsif YA_STATUS = "ELEMENT_VALUE" Then
+          YCURR_ELEMENT_VALUE += YCH
+        Endif
+      Endif
+    Else
+      If YA_STATUS = "ELEMENT_NAME" Then
+        YCURR_ELEMENT_NAME += YCH
+      Elsif YA_STATUS = "ELEMENT_VALUE" Then
+        YCURR_ELEMENT_VALUE += YCH
+      Endif
+    Endif
+
+    YPREV_CH = YCH
+
+    If PPROGRESS = [V]CST_AYES Then
+      Call AFF_BOITE("Element: "-num$(YCURR_ELEMENT_NAME),I,INTERRUPT) From GESECRAN
+    Endif
+    If [L]INTERRUPT = 1 Then Break : Endif
+  Next
+
+  If IN_STRING Then
+    WERRMSG = "JSON malformato: stringa non chiusa correttamente"
+    Call ERREUR(WERRMSG) From GESECRAN
+  Endif
+
+  If PPROGRESS = [V]CST_AYES Then
+    Call FERME_BOITE From GESECRAN
+  Endif
+
+End
+
+##################################################################################
+
+Subprog RAISE_END_ELEMENT(PURI, PELEMENT, PVALUE_CLB, PCOUNT, PSTOP, YRESPONSE)
+  Value Char PURI()
+  Value Char PELEMENT
+  Variable Clbfile PVALUE_CLB
+  Value Integer PCOUNT
+  Variable Integer PSTOP
+  Variable Char YRESPONSE()(,)
+
+  Local Char YEVENT(20) : YEVENT = "END_ELEMENT"
+  Local Char PVALUE(254) : PVALUE = PVALUE_CLB
+
+  # Non rimuovere le virgolette se sono presenti originariamente
+  If left$(PVALUE_CLB, 1) = '"' and right$(PVALUE_CLB, 1) = '"' Then
+    PVALUE = PVALUE_CLB
+  Else
+    PVALUE = ctrans(PVALUE_CLB, chr$(34), "")
+  Endif
+
+  Case YEVENT
+    When "END_ELEMENT" : Gosub END_ELEMENT
+  Endcase
+End
+
+################################################################################
+
+$END_ELEMENT
+
+  Local Char YURITXT(250) : YURITXT = ""
+  Local Char YFULLPATH(250) : YFULLPATH = ""
+  Local Integer I : I = 0
+
+  While PURI(I) <> ""
+    If YFULLPATH <> "" Then YFULLPATH += "." : Endif
+    YFULLPATH += PURI(I)
+    I += 1
+  Wend
+  If YFULLPATH <> "" Then YFULLPATH += "." : Endif
+  YFULLPATH += PELEMENT
+
+  # Rimuovi le virgolette dalla chiave finale
+  YFULLPATH = ctrans(YFULLPATH, chr$(34), "")
+
+  # Trova il prossimo indice disponibile in YRESPONSE
+  I = 0
+  While YRESPONSE(I, 0) <> ""
+    I += 1
+  Wend
+
+  # Memorizza il percorso e il valore
+  YRESPONSE(I, 0) = vireblc(YFULLPATH, 2)
+  YRESPONSE(I, 1) = vireblc(unescJson(PVALUE), 2)
+  #YRESPONSE(I, 1) = vireblc(PVALUE, 2)
+
+Return
+
+#######################################################################################################################
+
+Subprog APPEND_T0_TREEELEMENT(WELEMENTTREE, WELECOUNTER, YCURRELEMENT, WCOUNT)
+
+    Variable Char WELEMENTTREE
+    Variable Char WELECOUNTER
+    Value Char YCURRELEMENT
+    Variable Integer WCOUNT
+
+    Local Integer I: I = -1
+    Repeat
+        I+=1
+    Until vireblc(WELEMENTTREE(I),4) = ""
+    WELEMENTTREE(I) = YCURRELEMENT
+    Call UPDATECOUNTER(WELEMENTTREE, WELECOUNTER, WCOUNT)
+End
+
+######################################################################################################
+
+Subprog REMOVE_FROM_TREEELEMENT(WELEMENTTREE, YCURRELEMENT, YANDPARENT, WERRMSG)
+
+    Variable Char WELEMENTTREE
+    Value Char YCURRELEMENT
+    Value Integer YANDPARENT
+    Variable Char WERRMSG
+
+    Local Integer I: I = 0
+    I = func LASTINDEX(WELEMENTTREE)
+
+    If WELEMENTTREE(I) = YCURRELEMENT Then
+      Raz WELEMENTTREE(I)
+      If YANDPARENT = [V]CST_AYES and I > 0 Then
+        Raz WELEMENTTREE(I-1)
+      Endif
+    Else
+      WERRMSG = "Element '" + YCURRELEMENT + "' not closed correctly"
+    Endif
+End
+
+#############################################################################################################
+
+Subprog REMOVE_LAST_TREEELEMENT(WELEMENTTREE, WERRMSG)
+
+  Variable Char WELEMENTTREE
+  Variable Char WERRMSG
+
+  Local Integer I: I = 0
+  I = func LASTINDEX(WELEMENTTREE)
+  Raz WELEMENTTREE(I)
+End
+
+########################################################################################################
+
+Subprog UPDATECOUNTER(WELEMENTTREE, WELECOUNTER, WCOUNT)
+
+    Variable Char WELEMENTTREE
+    Variable Char WELECOUNTER
+    Variable Integer WCOUNT
+
+    Local Integer I: I = 0
+    Local Integer J
+    Local Char CURRELEMENT(250)
+    Local Shortint TROVATO : Raz TROVATO
+    While WELECOUNTER(I,0)<>""
+
+        TROVATO =1
+        J = 0
+        While WELEMENTTREE(J) <> ""
+            If WELEMENTTREE(J) <> WELECOUNTER(I, J) Then
+                Raz TROVATO
+                Break
+            Endif
+            J+=1
+            If J >= dim(WELEMENTTREE)  Then
+                Break
+            Endif
+
+        Wend
+        If TROVATO = 1 Then
+            If WELECOUNTER(I, J) = "" Then
+                WCOUNT = val(WELECOUNTER(I, func F_DEEPLEVEL())) + 1
+                WELECOUNTER(I, func F_DEEPLEVEL()) = num$(WCOUNT)
+                End
+            Else
+
+            Endif
+        Endif
+        I+=1
+    Wend
+
+    If TROVATO <> 1 Then
+        J=0
+        While WELEMENTTREE(J) <> ""
+            WELECOUNTER(I, J) = WELEMENTTREE(J) #CURRELEMENT
+            J+=1
+        Wend
+        WCOUNT = 1
+        WELECOUNTER(I,15) = num$(WCOUNT)
+    Endif
+End
+
+#########################################################################################################
+
+Funprog COUNT_ELEMENT(WELEMENTTREE, WELECOUNTER)
+
+    Variable Char WELEMENTTREE
+    Variable Char WELECOUNTER
+    Local Integer I: I = 0
+    Local Integer J
+    Local Integer RESULT : RESULT = 0
+    Local Char CURRELEMENT(250)
+    Local Shortint TROVATO : Raz TROVATO
+    Repeat
+        TROVATO =1
+        J = 0
+        While WELEMENTTREE(J) <> ""
+            If WELEMENTTREE(J) <> WELECOUNTER(I, J) Then
+                Raz TROVATO
+                Break
+            Endif
+            J+=1
+            If J >= dim(WELEMENTTREE)  Then
+                Break
+            Endif
+
+        Wend
+        If TROVATO = 1 Then
+            If WELECOUNTER(I, J) = "" Then
+                RESULT = val(WELECOUNTER(I,15))
+
+            Endif
+        Endif
+        I+=1
+    Until WELECOUNTER(I,0) = "" | RESULT > 0
+
+End RESULT
+
+#############################################################################################
+
+Funprog LASTINDEX(WELEMENTTREE)
+  Value Char WELEMENTTREE
+  Local Integer I: I = 0
+  While WELEMENTTREE(I) <> ""
+    I+=1
+  Wend
+  If I >= 1 Then
+    I -= 1
+  Endif
+End I
+
+#############################################################################################
+
+#**
+#* max sublevels of elemets managed
+#*!
+Funprog F_DEEPLEVEL()
+End 15
+
+#############################################################################################
+
+#**
+#* max numbers of different elements managed
+#*!
+Funprog F_MAXELEMENT()
+End 1500
+
+######################################################################################################################################
+
+$YPARSING
+    Case YEVENT
+        When "END_ELEMENT"      : Gosub END_ELEMENT
+    Endcase
+Return
+
+#**
+#* YPATH è il path complessivo di una chiave json se abbiamo un elemento code in root e
+#* uno in un oggetto child con la stessa chiave nel primo caso dobbiamo utilizzare "code.code"
+#* nel secondo "address.code" <br /><br />
+#* Call JSONPARSE_CLB(YBODY, AVOID.ACHAR, PPROGRESS, YELEMENTTREE, YELECOUNTER, WERRMSG, YJSON_ARR) From YJSONDESERIALIZE
+#* Local Char YAPIKEY(36) : YAPIKEY = func YJSONDESERIALIZE.GET_JSON_VALUE(YJSON_ARR, "code.code")
+#* Local Char YCTY(10) : YCTY = func YJSONDESERIALIZE.GET_JSON_VALUE(YJSON_ARR, "address.code.code")
+#* {
+#*  "code": "Pippo",
+#*  "address":{
+#*    "code":"RO",
+#*    "name":"Via Rossi, 89",
+#*    "city":"Ravenna"
+#*  }
+#* }
+#* Stampando YRESPONSE sopra si può vedere l'intero path di ogni chiave del json
+#*!
+Funprog GET_JSON_VALUE(YKEY_VALUE, YPATH)
+  Variable Char YKEY_VALUE()(,)
+  Value Char YPATH
+
+  Local Integer I : I = 0
+  While vireblc(YKEY_VALUE(I, 0), 2) <> ""
+    If YKEY_VALUE(I, 0) = YPATH Then
+      End YKEY_VALUE(I, 1)
+    Endif
+    I += 1
+  Wend
+End ""  # Ritorna stringa vuota se non trovato
+
+#########################################################################################################
+
+#**
+#* Metodo per estrarre chiave da un Percorso (ottenuto da parsing di un json e suddiviso dal Separatore adottato)
+#* (da un percorso con formato : "A.B.C.D" estraggo "D")
+#*
+#* @param YPATH Percorso
+#* @param YPATH_SEP  Separatore adottatto nel Percorso
+#*!
+
+Funprog GET_JSON_KEY(YPATH)
+
+ Value Char YPATH
+ Local Integer YINDEX, YI  #YINDEX = posizione ultimo separatore di YPATH trovato
+ Local Char YLEAF(15)
+
+ For YI =0 To len(YPATH)-1
+  If(xgetchar(YPATH,YI) = ".") #il separatore utilizzato dalla libreia è il punto
+     YINDEX=YI
+  Endif
+ Next
+ YLEAF = vireblc(right$(YPATH,YINDEX+1),2) #estraggo la sottostringa da ultimo separatore in poi
+
+End YLEAF
+
+#########################################################################################################
+#**
+#* Parametrizzazione Costanti legate a proprietà campi
+#*!
+
+$YSET_COLKEYS
+
+  Const Integer YCOL_NAME : YCOL_NAME = 0
+  Const Integer YCOL_TYPE : YCOL_TYPE = 1
+  Const Integer YCOL_VALUE : YCOL_VALUE = 2
+  Const Integer YCOL_VALID : YCOL_VALID = 3
+  Const Integer YCOL_MESSAGE : YCOL_MESSAGE = 4
+  Const Integer YCOL_FOCUS : YCOL_FOCUS = 5
+  Const Integer YCOL_VIS : YCOL_VIS = 6
+  Const Integer YCOL_ENA : YCOL_ENA = 7
+  Const Integer YCOL_DETT : YCOL_DETT = 8   #colonna che accoglie "" o "1" (se campo di dett)
+  Const Integer YCOL_ROW : YCOL_ROW = 9     #colonna che accoglie "0" o "1" (se riga corrente)
+
+  Local Char YCOL_KEYS(20)(10)                                      #array per chiavi colonne
+
+  YCOL_KEYS(YCOL_NAME)= "fieldName"
+  YCOL_KEYS(YCOL_TYPE)= "fieldType"
+  YCOL_KEYS(YCOL_VALUE)= "fieldValue"
+  YCOL_KEYS(YCOL_VALID)= "fieldValid"
+  YCOL_KEYS(YCOL_MESSAGE)= "fieldMessage"
+  YCOL_KEYS(YCOL_FOCUS)= "fieldFocus"
+  YCOL_KEYS(YCOL_VIS)= "fieldVisible"
+  YCOL_KEYS(YCOL_ENA)= "fieldEnter"
+  YCOL_KEYS(YCOL_DETT)= "fieldRiquadro"
+  YCOL_KEYS(YCOL_ROW)= "currentRow"
+
+Return
+
+########################################################################################################
+#**
+#* Metodo per estrarre da JSON i campi e loro proprietà mettendoli in una matrice, considerando la chiave "currentRow" per campi di dettaglio
+#*
+#* @param YBODY Json del body come Clob
+#* @param YCURRENTUSER Utente loggato
+#* @param YFIELDS Matrice dei campi
+#*!
+
+Subprog YJSON2ARRAY(YBODY, YCURRENTUSER, YFIELDS)
+
+  Value Clbfile YBODY
+  Variable Char YCURRENTUSER
+  Variable Char YFIELDS()(,)
+
+  Local Clbfile YDOC(2):YDOC = YBODY
+  Local Integer PPROGRESS:PPROGRESS=1
+  Local Char WERRMSG(100)
+  Local Char YELEMENTTREE(250)(0..func F_DEEPLEVEL() )
+  Local Char YELECOUNTER(250)(func F_MAXELEMENT(), func F_DEEPLEVEL() + 1)
+  Local Char YRESPONSE(250)(2600,2)
+
+  Local Integer YI,YJ: YJ=-1
+  Local Char YPATH(250),YVALUE(250),YJSON_KEY(20),YTURN_LEAF(20)
+
+  Local Char YTFIELD(11): YTFIELD = AVOID.ACHAR                     #nome 1° campo di dett
+  Local Integer YRI:YRI=-1
+  Local Integer YCURROW:YCURROW =-1
+
+  Call JSONPARSE_CLB(YDOC,PPROGRESS,YELEMENTTREE,YELECOUNTER,WERRMSG,YRESPONSE)
+
+  Gosub YSET_COLKEYS
+
+  Local Char YFIRSTKEY(100)
+
+  For YI=0 To dim(YRESPONSE,1) - 1    #ciclo su tutti i path estratti
+    YPATH = YRESPONSE(YI,0)
+    YVALUE = YRESPONSE(YI,1)
+    YJSON_KEY = func GET_JSON_KEY(YPATH)
+
+    If([L]YJSON_KEY = "currentUser")
+      YCURRENTUSER = YVALUE
+    Elsif(find(YJSON_KEY, YCOL_KEYS) > 0)
+
+      # ricavo valore currentRow
+      If(YJSON_KEY = YCOL_KEYS(YCOL_ROW))
+        YCURROW = val(YVALUE)   # QUI : yvalue : intero
+      Endif
+
+      # ricavo la prima chiave che ci manda ax3m in yax3mresp
+      If (YJ < 0 & (YJSON_KEY <> "currentRow"))
+        YFIRSTKEY = YJSON_KEY
+      Endif
+
+      If(YJSON_KEY = YFIRSTKEY) #nuovo campo
+        YJ+=1
+      Endif
+
+      #Salvo Nome 1° campo di Dett(YCURROW: già stata valorizzata)
+      If(YTFIELD = AVOID.ACHAR & YCURROW > -1 & YJSON_KEY = YCOL_KEYS(YCOL_NAME))
+        YTFIELD = YVALUE
+      Endif
+
+      #riempio le colonne con idx = 0..9
+      If YJ >= 0
+        Case YJSON_KEY
+          When YCOL_KEYS(YCOL_NAME) #0
+            YFIELDS(YJ,YCOL_NAME) = YVALUE
+            If(YVALUE = YTFIELD)
+              YRI += 1
+            Endif
+            YFIELDS(YJ,YCOL_ROW)= func YUTILS.STR_IIF((YRI = YCURROW & YCURROW >= 0), "1", "0")   #9 (qui valorizzata col idx=9)#contatore= currow, "1"
+          When YCOL_KEYS(YCOL_TYPE) #1
+            YFIELDS(YJ,YCOL_TYPE) = YVALUE
+          When YCOL_KEYS(YCOL_VALUE) #2
+            YFIELDS(YJ,YCOL_VALUE) = YVALUE
+          When YCOL_KEYS(YCOL_VALID) #3
+            YFIELDS(YJ,YCOL_VALID) = func YUTILS.STR_IIF(YVALUE = "true","0","1") #qui YVALUE (da json) = "true"/"false"
+          When YCOL_KEYS(YCOL_MESSAGE) #4
+            YFIELDS(YJ,YCOL_MESSAGE) = YVALUE
+          When YCOL_KEYS(YCOL_FOCUS) #5
+            YFIELDS(YJ,YCOL_FOCUS) = func YUTILS.STR_IIF(YVALUE ="true","1","0") #qui YVALUE (da json) = "true"/"false"
+          When YCOL_KEYS(YCOL_VIS) #6
+            YFIELDS(YJ,YCOL_VIS) = func YUTILS.STR_IIF(YVALUE ="true","1","0") #qui YVALUE (da json) = "true"/"false"
+          When YCOL_KEYS(YCOL_ENA) #7
+            YFIELDS(YJ,YCOL_ENA) = func YUTILS.STR_IIF(YVALUE ="true","1","0") #qui YVALUE (da json) = "true"/"false"
+          When YCOL_KEYS(YCOL_DETT) #8
+            YFIELDS(YJ,YCOL_DETT) = YVALUE
+          When Default
+        Endcase
+      Else
+        #Call ECR_TRACE("Errore:" - YJSON_KEY - ";" - YPATH - ";" - YVALUE, 0) From GESECRAN
+      Endif
+    Endif
+  Next
+
+End
+
+################################################################################
+############################ debug #############################################
+
+$YAX3MOB_PRINT_YRESPONSE
+
+  Local Integer XDIM : XDIM = func YUTILS.COUNT_MULTI(YRESPONSE) - 1
+  Local Integer YDIM : YDIM = dim(YRESPONSE,2)-1
+  Local Integer I, J
+
+  Local Char YFIL(250)
+  YFIL = filpath("tmp", "print_yRESPONSE_des_"+"_"+num$(int(rnd(10000)))+"_"+date$, "json")
+  Openo YFIL Using [YF]
+  Iomode adxium GUTF8 Using [YF]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF]
+  Wrseq "xdim = " - num$(XDIM)- "ydim = "-num$(dim(YRESPONSE,2)) Using [YF]
+
+  For I = 0 To XDIM
+    Wrseq "New item:"  Using [YF]
+    For J = 0 To YDIM
+      Wrseq num$(I) - ":"- "value"-":" - YRESPONSE(I,J) Using [YF]
+    Next J
+  Next
+  Openo Using [YF]
+
+Return

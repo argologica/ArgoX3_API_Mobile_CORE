@@ -1,0 +1,198 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+
+#If GUSER='ADMIN' : Infbox(ACTION) : Endif
+
+  Case ACTION
+    When "DEBUT"         : Gosub DEBUT
+    When "BOUTON"        : Gosub BOUTON
+    When "FIN"           : Gosub FIN
+    When Default
+  Endcase
+
+Return
+
+
+##############################################################################################################
+
+$DEBUT
+
+  If !clalev([F:YAUS]) : Local File AUTILIS [F:YAUS] : Endif
+  If !clalev([F:YAX3MU]) : Local File YAX3MUSER [F:YAX3MU] : Endif
+
+  Call OUVRE_TRACE ("YAX3MUSR - Gestione Utenti ArgoX3 Mobile - " - num$(date$)) From LECFIC
+  Gosub YLOAD_USR
+
+Return
+
+###############################################################################################################
+
+$BOUTON
+
+  Case BOUT
+    When "B"
+      Gosub YCREATEUPDATE_USER
+    When "R"
+      Gosub YLOAD_USR
+    When Default
+  Endcase
+
+  Affzo [M:YAX3MU]
+
+Return
+
+################################################################################################################
+
+$FIN
+
+  Raz [M:YAX3MU]
+  Call FERME_TRACE From LECFIC
+Return
+
+################################################################################################################
+#                                                   BOTTONI DI FINESTRA
+################################################################################################################
+
+#**
+#* BF1 : POPOLAMENTO RIQUADRO/RICERCA: Popolamento Griglia Riquadro
+#* a prima apertura/ con ricerca con campi-filtro (REPNAM : Nome Completo ; ADDEMLX3 : Mail X3)
+#*
+#*!
+
+$YLOAD_USR
+
+  Local Char YMESSAGE(250)
+  Local Integer YI: YI = 0
+  Local Char YCRITERE(250)(2): YCRITERE(0)= "1=1" : YCRITERE(1)= " & 1=1"
+
+  If([M:YAX3MU]YUSRFILTER <> AVOID.ACHAR)
+    YCRITERE(0) -= "& (tolower([F:YAUS]NOMUSR) = tolower([M:YAX3MU]YUSRFILTER) | instr(1,tolower([F:YAUS]NOMUSR),tolower([M:YAX3MU]YUSRFILTER))>0)"
+  Endif
+
+  If([M:YAX3MU]YEMLFILTER <> AVOID.ACHAR)
+    YCRITERE(1) -= "& (tolower([F:YAUS]ADDEML) = tolower([M:YAX3MU]YEMLFILTER) | instr(1,tolower([F:YAUS]ADDEML),tolower([M:YAX3MU]YEMLFILTER))>0)"
+  Endif
+
+  #Popolamento Griglia di Riquadro & Gestione Bottoni di Riga
+  Link [YAUS] With [F:YAX3MU]YAX3MU0 = [YAUS]USR As [LNK] Where [YAUS]ENAFLG = 2
+  Columns [LNK] ([YAUS]USR,[YAUS]NOMUSR,[YAUS]ADDEML,[YAX3MU]USERNAME) #
+
+  Filter [LNK] Where evalue(YCRITERE) Order By [YAUS]NOMUSR #Record SET
+  nolign = 0
+
+  If(rowcount([LNK])>0)
+    For [LNK]
+      nolign+=1
+      [M:YAX3MU]AX3MUSR(nolign-1)=[F:YAX3MU]USERNAME
+      [M:YAX3MU]USR(nolign-1)=[F:YAUS]USR
+      [M:YAX3MU]NOMUSR(nolign-1)=[F:YAUS]NOMUSR
+      [M:YAX3MU]ADDEMLX3(nolign-1)=[F:YAUS]ADDEML
+      If [F:YAX3MU]USERNAME = AVOID.ACHAR
+        [M:YAX3MU]ENAFLG(nolign-1)=1
+      Else
+        [M:YAX3MU]ENAFLG(nolign-1)=2
+      Endif
+    Next
+  Endif
+
+  Filter [LNK]
+
+  If(nolign > 0)
+    [M:YAX3MU]NBLIG = nolign
+     If([M:YAX3MU]ADDEMLX3(nolign-1) <> AVOID.ACHAR)
+      Raz GBOUT1
+     Else
+      Raz GBOUT2,GBOUT3
+    Endif
+  Endif
+
+  Affzo [M:YAX3MU]
+Return
+
+#################################################################################################################
+#**
+#* Sub per Creazione utente/ Aggiornamento credenziali
+#*!
+
+$YCREATEUPDATE_USER
+
+  Local Integer YC, YI, YJ : YC = 0
+  Local Char YMESSAGE(250)
+  Local Integer YSUCCESS : YSUCCESS = 1
+  Local Char YUSERCRED(250)
+
+  # Ottieni righe selezionate
+  Local Char YUSERDATA(50)(100, 6) #ho inserito un massimo di 100 utenti
+  Local Char YPASSWORD(250)
+
+  Raz [M:YAX3MU]YCRED
+
+  # Ciclo per riempire dati operazione
+  For YI = 0 To [M:YAX3MU]NBLIG - 1
+    If ([M:YAX3MU]YSELECT(YI) = 2)
+      YUSERDATA(YC, 0) = [M:YAX3MU]USR(YI) #utente x3
+      YUSERDATA(YC, 1) = vireblc(func YUTILS.STR_IIF([M:YAX3MU]AX3MUSR(YI) = AVOID.ACHAR, YUSERDATA(YC, 0), [M:YAX3MU]AX3MUSR(YI)), 2)  #utente ax3m
+      YUSERDATA(YC, 2) = func YUTILS.YGET_PASSWORD()
+      YUSERDATA(YC, 3) = [M:YAX3MU]NOMUSR(YI)
+      YUSERDATA(YC, 4) = [M:YAX3MU]ADDEMLX3(YI)
+      YUSERDATA(YC, 5) = num$([M:YAX3MU]ENAFLG(YI))
+      YC += 1
+    Endif
+  Next
+
+  If (YC > 5)
+    Call ERREURT("Selezionare al massimo 5 utenti!", 0) From GESECRAN
+  Elsif (YC > 0)
+    Call YCREATEUPDATE_USER(YUSERDATA, YSUCCESS, YMESSAGE) From YAX3MUSRLIB
+    If (YSUCCESS = 1)
+      Call ERREURT("Utenti aggiornati con successo!", 0) From GESECRAN
+      For YJ = 0 To func YUTILS.COUNT_MULTI(YUSERDATA) - 1
+        YUSERCRED = "Utente:" - YUSERDATA(YJ, 1) + " - Password:" - YUSERDATA(YJ, 2)
+        [M:YAX3MU]YCRED += [L]YUSERCRED + chr$(10)
+        Affzo [M:YAX3MU]YCRED
+      Next
+    Else
+      Call ERREURT(YMESSAGE, 2) From GESECRAN
+    Endif
+  Else
+    Call ERREURT("Non sono stati selezionati utenti, impossibile proseguire!", 1) From GESECRAN
+  Endif
+
+  Raz [M:YAX3MU]YSELECT
+  Gosub YLOAD_USR
+
+Return
+######################################################################################
+## Etichetta aggiunta dal supervisore (videata YAX3MUSR) 20/03/2025 09:21:00 (ARG01)
+######################################################################################
+Subprog B1_NBLIG
+
+  Local Char NEW_PASSWORD (30), YMESSAGE(250)
+  Local Integer YLENGTH
+  Local Integer YSTAT, YSUCCESS : YSUCCESS = 1
+
+  If [M:YAX3MU]ENAFLG(nolign - 1) <> 2
+    Call ERREURT("L'utente non è attivo su ArgoX3 Mobile, procedere prima alla creazione!", 1) From GESECRAN
+  Else
+    Call SAICAR(NEW_PASSWORD, "Reset password", "Inserire la nuova password:", "YAX3MU", 1, YLENGTH, "", YSTAT) From GESECRAN
+    If YSTAT = 2 # se premo ok
+      If func YUTILS.YCHECK_PASSWORD(NEW_PASSWORD) <> 1
+        Call ERREURT("La password deve essere lunga almeno 8 caratteri e contenere almeno una lettera maiuscola, una lettera minuscola, un numero e un carattere speciale (es. !@#$%^&*)!", 1) From
+& GESECRAN
+        Call B1_NBLIG()
+      Else
+        #aggiorna l'utente
+        Call YRESET_USERPWD([M:YAX3MU]AX3MUSR(nolign-1), NEW_PASSWORD, YSUCCESS, YMESSAGE) From YAX3MUSRLIB
+        If YSUCCESS = 1
+          Call ERREURT("Reset password avvenuto con successo!", 0) From GESECRAN
+        Else
+          Call ERREURT(YMESSAGE, 1) From GESECRAN
+        Endif
+      Endif
+    Endif
+  Endif
+
+End
+
+
+######################################################################################

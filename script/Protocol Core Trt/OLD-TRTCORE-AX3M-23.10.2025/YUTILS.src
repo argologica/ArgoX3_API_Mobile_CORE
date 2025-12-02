@@ -1,0 +1,1111 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#####################################################################################################################################
+#                                               Libreria con funzioni di utilità
+#####################################################################################################################################
+
+$GET_CONSTANTS
+
+  Const Integer TRUE : TRUE = 2
+  Const Integer FALSE : FALSE = 1
+
+Return
+
+$GET_WS_CONSTANTS
+
+  Const Integer SUCCESS : SUCCESS = 200
+  Const Integer CREATED : CREATED = 201
+  Const Integer NO_CONTENT : NO_CONTENT = 204
+  Const Integer MOVED_PERMANENTLY : MOVED_PERMANENTLY = 301
+  Const Integer FOUND : FOUND = 302
+  Const Integer NOT_MODIFIED : NOT_MODIFIED = 304
+  Const Integer BAD_REQUEST : BAD_REQUEST = 400
+  Const Integer UNAUTHORIZED : UNAUTHORIZED = 401
+  Const Integer FORBIDDEN : FORBIDDEN = 403
+  Const Integer NOT_FOUND : NOT_FOUND = 404
+  Const Integer METHOD_NOT_ALLOWED : METHOD_NOT_ALLOWED = 405
+  Const Integer CONFLICT : CONFLICT = 409 #'Tentativo di creare un valore chiave duplicato.'
+  Const Integer LOCKED : LOCKED = 423 #'Tabella bloccata.'
+  Const Integer INTERNAL_SERVER_ERROR : INTERNAL_SERVER_ERROR = 500
+  Const Integer NOT_IMPLEMENTED : NOT_IMPLEMENTED = 501
+  Const Integer BAD_GATEWAY : BAD_GATEWAY = 502
+  Const Integer SERVICE_UNAVAILABLE : SERVICE_UNAVAILABLE = 503
+  Const Integer INSUFFICIENT_STORAGE : INSUFFICIENT_STORAGE = 507 #'Spazio insufficiente per creare nuove righe.'
+
+Return
+
+########################################################
+
+Funprog FIXURL(MALFORMEDURL)
+  Value Char MALFORMEDURL
+  Local Char URL(250)
+  Local Char PROTOCOL(10), TEMPURL(250), DOMAIN(250), REMAINDER(250)
+  Local Integer HASPROTOCOL, HASWWW, HASTLD, I, PROTOCOLPOS, SLASHPOS
+
+  # Rimuovi spazi iniziali e finali
+  URL = vireblc(MALFORMEDURL, 2)
+  HASPROTOCOL = 0
+  HASWWW = 0
+  HASTLD = 0
+
+  # Verifica se ha già un protocollo
+  If mid$(URL, 1, 7) = "http://" | mid$(URL, 1, 8) = "https://"
+    HASPROTOCOL = 1
+  Endif
+
+  # Aggiungi protocollo se mancante
+  If !HASPROTOCOL
+    URL = "https://" + URL
+  Endif
+
+  # Trova posizione dopo il protocollo
+  If mid$(URL, 1, 7) = "http://"
+    PROTOCOLPOS = 8
+    PROTOCOL = "http://"
+  Else
+    PROTOCOLPOS = 9  # https:// ha 8 caratteri
+    PROTOCOL = "https://"
+  Endif
+
+  # Verifica se ha www
+  If mid$(URL, PROTOCOLPOS, 4) = "www."
+    HASWWW = 1
+  Endif
+
+  # Verifica se ha un TLD comune (.com, .net, ecc.)
+  If instr(0, URL, ".com") > 0 | instr(0, URL, ".net") > 0 | instr(0, URL, ".org") > 0 | instr(0, URL, ".gov") > 0 | instr(0, URL, ".edu") > 0 | instr(0, URL, ".io") > 0 | instr(0, URL, ".dev") > 0 |
+& instr(0, URL, ".it") > 0 | instr(0, URL, ".fr") > 0 | instr(0, URL, ".de") > 0 | instr(0, URL, ".es") > 0 | instr(0, URL, ".uk") > 0
+    HASTLD = 1
+  Endif
+
+  # Aggiungi www se mancante e potrebbe essere necessario (euristica semplificata)
+  If !HASWWW & HASTLD
+    # Dobbiamo ricostruire l'URL con www.
+    DOMAIN = mid$(URL, PROTOCOLPOS, len(URL) - PROTOCOLPOS + 1)
+    URL = PROTOCOL + "www." + DOMAIN
+  Endif
+
+  # Aggiungi .com se non ha un TLD
+  If !HASTLD
+    # Trova la posizione del primo slash dopo il protocollo
+    SLASHPOS = instr(PROTOCOLPOS, URL, "/")
+
+    # Se non c'è slash dopo il dominio, aggiungi .com alla fine
+    If SLASHPOS = 0
+    URL = URL + ".com"
+    Else
+    # Altrimenti, inserisci .com prima del primo slash
+    DOMAIN = mid$(URL, 1, SLASHPOS - 1)
+    REMAINDER = mid$(URL, SLASHPOS, len(URL) - SLASHPOS + 1)
+    URL = DOMAIN + ".com" + REMAINDER
+    Endif
+  Endif
+
+  # Correggi doppi slash dopo il dominio
+  # Poiché non abbiamo la funzione replace, dobbiamo gestirlo manualmente
+  I = instr(PROTOCOLPOS, URL, "//")
+  While I > 0
+    TEMPURL = mid$(URL, 1, I) + mid$(URL, I + 2, len(URL) - (I + 2) + 1)
+    URL = TEMPURL
+    I = instr(PROTOCOLPOS, URL, "//")
+  Wend
+
+End URL
+
+########################################################
+              #Manipolazione stringhe#
+########################################################
+
+Subprog YSPLIT(STR,SEP,RESULT,NUMRES)
+  Value Char STR,SEP
+  Variable Char RESULT()()
+  Variable Integer NUMRES
+
+  Local Integer IND,IND2 : IND=1
+
+  Raz RESULT,NUMRES
+  If SEP="" End Endif
+
+  While 1
+    IND2=instr(IND,STR,SEP)
+    If !IND2
+      RESULT(NUMRES)=right$(STR,IND)
+      If RESULT(NUMRES)<>"" : NUMRES+=1 : Endif
+      Break
+    Elsif IND2>IND
+      RESULT(NUMRES)=seg$(STR,IND,IND2-1)
+      NUMRES+=1
+      If NUMRES>=dim(RESULT) : Break : Endif
+    Endif
+    IND=IND2+len(SEP)
+  Wend
+End
+
+########################################################
+
+Subprog YSPLITCLB(STR,SEP,RESULT,NUMRES)
+  Value Clbfile STR
+  Value Char SEP
+  Variable Clbfile RESULT()()
+  Variable Integer NUMRES
+
+  Local Integer IND,IND2 : IND=1
+
+  Raz RESULT,NUMRES
+  If SEP="" End Endif
+
+  While 1
+    IND2=instr(IND,STR,SEP)
+    If !IND2
+      RESULT(NUMRES)=right$(STR,IND)
+      If RESULT(NUMRES)<>"" : NUMRES+=1 : Endif
+      Break
+    Elsif IND2>IND
+      RESULT(NUMRES)=seg$(STR,IND,IND2-1)
+      NUMRES+=1
+      If NUMRES>=dim(RESULT) : Break : Endif
+    Endif
+    IND=IND2+len(SEP)
+  Wend
+End
+
+########################################################
+
+Subprog YCLB2STRARR(YCLOB, YRESULT)
+  Value Clbfile YCLOB
+  Variable Char YRESULT ()()
+  Local Integer STRNUM, I, START
+  Local Integer TOTAL_LEN : TOTAL_LEN = len(YCLOB)
+
+  If len(YCLOB) = 0
+    End
+  Endif
+
+  STRNUM = int((TOTAL_LEN - 1) / 250) + 1
+  For I = 0 To STRNUM - 2
+    START = I * 250 + 1
+    YRESULT(I) = mid$(YCLOB, START, 250)
+  Next
+
+  # Gestione dell'ultimo segmento
+  START = (STRNUM - 1) * 250 + 1
+  YRESULT(STRNUM - 1) = mid$(YCLOB, START, TOTAL_LEN - START + 1)
+End
+
+########################################################
+
+Funprog YJOIN(ARRAY,SEP)
+  Value Char ARRAY
+  Value Char SEP
+  Local Char RESULT(250)
+
+  For I=0 To dim(ARRAY)-1
+    If vireblc(num$(ARRAY(I)),2)<>""
+      If RESULT<>"" : RESULT+=SEP : Endif
+      RESULT+=num$(ARRAY(I))
+    Endif
+  Next
+End RESULT
+
+#######################################################
+#**
+#* Ritorna la prima posizione nella dell'elemento YKEY nell'array multidim. PARAMS_ARR, se non trovato ritorna -1
+#*
+#* @param PARAMS_ARR Matrice dove cercare elemento YKEY
+#* @param YKEY Elemento da cercare
+#*!
+
+Funprog FIND_ITEM(PARAMS_ARR, YKEY)
+
+  Value Char PARAMS_ARR()(,)
+  Value Char YKEY
+  Local Integer I
+  Local Integer J
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    For J = 0 To dim(PARAMS_ARR, 2) - 1
+      If( vireblc(PARAMS_ARR(I, J),2) = YKEY)
+        End I
+      Endif
+    Next J
+  Next I
+
+End -1
+
+################################################################
+#**
+#* Ritorna la YPOS posizione dell'elemento YKEY nell'array multidim. PARAMS_ARR, se non trovato ritorna -1
+#*
+#* @param PARAMS_ARR Matrice dove cercare elemento YKEY
+#* @param YKEY Elemento da cercare
+#* @param YPOS Pos dell'elemento da cercare
+#*!
+
+Funprog FIND_MULTITEM(PARAMS_ARR, YKEY, YPOS)
+
+  Value Char PARAMS_ARR()(,)
+  Value Char YKEY
+  Value Integer YPOS
+
+  Local Integer YMAX: YMAX =dim(PARAMS_ARR,1)*dim(PARAMS_ARR,2)
+  Local Integer YFOUND(YMAX)  #array con le posizioni (righe) della YKEY cercata
+  Local Integer I,J
+  Local Integer INDEX: INDEX =-1
+  Local Integer YFOUND_IDX: YFOUND_IDX = -1
+
+  Call YINIT_INTARR(YFOUND,-1)
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    For J = 0 To dim(PARAMS_ARR, 2) - 1
+      If( vireblc(PARAMS_ARR(I, J),2) = YKEY)
+        INDEX +=1
+        YFOUND(INDEX)=I
+      Endif
+    Next J
+  Next I
+
+  YFOUND_IDX = func YUTILS.IIF(INDEX >= 0, YFOUND(YPOS), -1)
+
+#Call ECR_TRACE("FIND_MULTITEM -YFOUND_IDX = "- num$(YFOUND_IDX) - "-"-"INDEX = " -num$(INDEX) ,0)From GESECRAN
+
+End YFOUND_IDX
+
+#######################################################
+#**
+#* Subprog che ritorna l'array con tutti gli indici delle occorennze di YKEY in PARAMS_ARR
+#*
+#* @param PARAMS_ARR Array dove cercare le occorrenze di un certo item
+#* @param YKEY Item di cui cercare le occorrenze
+#* @param YFOUND Array con indici delle occorrenze di YKEY nell'array PARAMS_ARR
+#*!
+
+Subprog YFIND_OCCS(PARAMS_ARR, YKEY,YFOUND)
+
+  Value Char PARAMS_ARR()(,)
+  Value Char YKEY
+  Variable Integer YFOUND()
+
+  Local Integer I,J,INDEX: INDEX =-1
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    For J = 0 To dim(PARAMS_ARR, 2) - 1
+      If( vireblc(PARAMS_ARR(I, J),2) = YKEY)
+        INDEX +=1
+        YFOUND(INDEX)=I
+      Endif
+    Next J
+  Next I
+End
+
+#######################################################
+#**
+#* Subprog che inizializza un intero array 1D di interi con un determinato valore intero
+#*
+#* @param PARAMS_ARR Array 1D di Interi da inizializzare con un valore di Default
+#* @param YDEFINT Valore Intero di default con cui inizializzare l'array
+#*!
+
+Subprog YINIT_INTARR(PARAMS_ARR,YDEFINT)
+
+  Variable Integer PARAMS_ARR()
+  Value Integer YDEFINT
+  Local Integer YI
+
+  For YI = 0 To dim(PARAMS_ARR,1)-1
+    PARAMS_ARR(YI)= YDEFINT
+  Next
+End
+
+#######################################################
+#**
+#* Ritorna la posizione dell'elemento che contiene la sottostringa YKEY nell'array PARAMS_ARR, se non trovato ritorna -1
+#*
+#* @param PARAMS_ARR Matrice dove cercare elemento YKEY
+#* @param YKEY Elemento da cercare
+#*!
+
+Funprog CONTAINS_ITEM(PARAMS_ARR, YKEY, FIRST_DIM, SECOND_DIM)
+
+  Value Char PARAMS_ARR()(,)
+  Value Char YKEY
+  Variable Integer FIRST_DIM
+  Variable Integer SECOND_DIM
+
+  Local Integer I
+  Local Integer J
+
+  YKEY = vireblc(YKEY, 2)
+  FIRST_DIM = func IIF(FIRST_DIM > 0, FIRST_DIM, dim(PARAMS_ARR, 1) - 1)
+  SECOND_DIM = func IIF(SECOND_DIM > 0, SECOND_DIM, dim(PARAMS_ARR, 2) - 1)
+
+  For I = 0 To FIRST_DIM
+    For J = 0 To SECOND_DIM
+      If(instr(1, YKEY, vireblc(PARAMS_ARR(I, J),2)) > 0)
+        End I
+      Endif
+    Next J
+  Next I
+
+End -1
+
+########################################################
+
+Funprog FIND1D_ITEM(PARAMS_ARR, YKEY)
+
+  Value Char PARAMS_ARR()()
+  Value Char YKEY
+  Local Integer I
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    If(PARAMS_ARR(I) = YKEY)
+      End I
+    Endif
+  Next I
+End -1
+
+#################################################################################
+#**
+#* Funzione che ritorna l'indice del 1° item deiverso da YKEY (Altrimenti: -1)
+#*
+#* @param PARAMS_ARR Array dove cercare
+#* @param YKEY Elemento con cui confrontare
+#*!
+Funprog YFIND1D_NOT_EQITEM(PARAMS_ARR, YKEY)
+
+  Value Char PARAMS_ARR()()
+  Value Char YKEY
+  Local Integer I
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    If(vireblc(PARAMS_ARR(I),2)<> AVOID.ACHAR & PARAMS_ARR(I) <> YKEY)
+      End I
+    Endif
+  Next I
+End -1
+
+#################################################################################
+#**
+#* Metodo che controlla se l'array ha almeno degli elementi distinti
+#* (Ritorna: 1 se elementi tutti uguali, 0: se esistono elementi distinti)
+#*
+#* @param PARAMS_ARR
+#*!
+
+Funprog YEXISTDISTINCTS_IN1D(PARAMS_ARR)
+
+  Value Char PARAMS_ARR()()
+  Local Integer I,J,YDIM,YDISTINCTS: YDISTINCTS = 1 # =0 esitono DISTINTI , =1 (tutti uguali)
+  Local Char YTEMP(250)
+  YDIM = dim(PARAMS_ARR, 1)
+
+  For I = 0 To YDIM - 1
+    For J = I +1 To YDIM -1
+
+      #elementi non vuoti & distinti
+      If(vireblc(PARAMS_ARR(I),2) <> AVOID.ACHAR & vireblc(PARAMS_ARR(J),2) <> AVOID.ACHAR & PARAMS_ARR(I) <> PARAMS_ARR(J))
+       YDISTINCTS = 0
+       Break 2
+      Endif
+    Next J
+  Next I
+
+End YDISTINCTS
+
+#################################################################################
+#**
+#* Metodo che ritorna il 1° indice nell'array in cuisi trova YKEY, escludendo l'indice YEXCL_INDEX.
+#* Se non trovato ritorna -1.
+#*
+#* @param PARAMS_ARR Array dove ricercare
+#* @param YKEY  Elemento da ricercare nell'array
+#* @param YEXCL_INDEX Indice da escludere
+#*!
+
+Funprog YFIND1D_WITHEXCL(PARAMS_ARR, YKEY, YEXCL_INDEX)
+
+  Value Char PARAMS_ARR()()
+  Value Char YKEY
+  Value Integer YEXCL_INDEX
+  Local Integer I
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    If(vireblc(PARAMS_ARR(I), 2) <> AVOID.ACHAR & PARAMS_ARR(I) = YKEY & I <> YEXCL_INDEX)
+      End I
+    Endif
+  Next I
+End -1
+
+##########################################################################################
+#**
+#* Ritorna numero occorrenze dell'elemento YKEY  nella matrice (array 2D) PARAMS_ARR
+#*
+#* @param PARAMS_ARR Matrice dove cercare numero volte elemento YKEY
+#* @param YKEY Elemento di cui cercare il numero delle occorrenze
+#*!
+
+Funprog COUNT_ITEM(PARAMS_ARR, YKEY)
+
+  Value Char PARAMS_ARR()(,)
+  Value Char YKEY
+  Local Integer COUNT : COUNT = 0
+  Local Integer I
+  Local Integer J
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    For J = 0 To dim(PARAMS_ARR, 2) - 1
+      If(PARAMS_ARR(I, J) = YKEY)
+        COUNT+=1
+      Endif
+    Next J
+  Next I
+
+End COUNT
+
+########################################################################################
+#**
+#* Ritorna numero occorrenze dell'elemento YKEY  nell'array 1D: PARAMS_ARR
+#*
+#* @param PARAMS_ARR Array dove cercare numero volte elemento YKEY
+#* @param YKEY Elemento di cui cercare il numero delle occorrenze
+#*!
+Funprog COUNT_1DITEM(PARAMS_ARR, YKEY)
+
+  Value Char PARAMS_ARR()()
+  Value Char YKEY
+  Local Integer COUNT : COUNT = 0
+  Local Integer I
+
+  YKEY = vireblc(YKEY, 2)
+  For I = 0 To dim(PARAMS_ARR, 1) - 1
+    If(PARAMS_ARR(I) = YKEY)
+      COUNT+=1
+    Endif
+  Next I
+
+End COUNT
+
+########################################################################################
+#**
+#* Metodo per conteggio elementi non voti di un array 1D
+#*
+#* @param ARRAY
+#*!
+Funprog COUNT(ARRAY)
+  Value Char ARRAY()()
+  Local Integer COUNT : COUNT = 0
+
+  For I=0 To dim(ARRAY) - 1
+    If vireblc(num$(ARRAY(I)), 2) <> AVOID.ACHAR
+      COUNT+=1
+    Else
+      End COUNT
+    Endif
+  Next
+End COUNT
+
+########################################################
+
+Funprog INT_COUNT(INT_ARRAY)
+
+  Value Integer INT_ARRAY()
+  Local Integer COUNT : COUNT = 0
+
+  For I=0 To dim(INT_ARRAY) - 1
+    If vireblc(num$(INT_ARRAY(I)), 2) <> AVOID.ACHAR
+      COUNT+=1
+    Else
+      End COUNT
+    Endif
+  Next
+End COUNT
+########################################################
+
+Funprog COUNT_MULTI(ARRAY)
+  Value Char ARRAY()(,)
+  Local Integer I, COUNT : COUNT = 0
+
+  For I=0 To dim(ARRAY, 1) - 1
+    If vireblc(num$(ARRAY(I, 0)), 2) <> AVOID.ACHAR
+      COUNT+=1
+    Else
+      End COUNT
+    Endif
+  Next
+End COUNT
+
+########################################################
+# v12 adxuid(1)
+Funprog GET_BDDID()
+  Local File ALOGIN [F:ALO]
+  Read [F:ALO]ALO2 =  num$(adxuid(1))
+  End num$([F:ALO]BDDID)
+End
+
+########################################################
+
+Funprog GET_ALOSEQ()
+  WBDDID=func GET_BDDID()
+  Local File ALOGIN[ALO]
+  Filter [F:ALO] Where [F:ALO]BDDID=WBDDID and [F:ALO]FLG=2
+  Read [F:ALO] First
+End [F:ALO]SEQ
+
+
+########################################################
+
+Funprog IIF(TEST,TRUE,FALSE)
+  Value Integer TEST
+
+  If TEST
+    End TRUE
+  Endif
+End FALSE
+
+########################################################
+
+Funprog STR_IIF(TEST, TRUE_STRING, FALSE_STRING)
+  Value Integer TEST
+  Value Char TRUE_STRING
+  Value Char FALSE_STRING
+
+  If TEST
+    End TRUE_STRING
+  Endif
+End FALSE_STRING
+
+
+#######################################################
+
+Subprog COPYARR(DST,SRC)
+  Variable Char DST()()
+  Const Char SRC()()
+  Local Integer I,N
+  N=max(dim(DST),dim(SRC))
+  Raz DST
+  For I=0 To N-1
+    DST(I)=SRC(I)
+  Next
+End
+
+##################################################
+
+Subprog ARR2MSK(ARRAYVAL,MSKFLD)
+  Value Char MSKFLD
+  Local Integer I
+  For I=0 To dim(ARRAYVAL)-1
+    If evalue("dim("+MSKFLD+num$(I+1)+")")>=0
+      Assign MSKFLD+num$(I+1) With ARRAYVAL(I)
+    Else
+      Break
+    Endif
+  Next
+End
+
+##################################################
+
+Funprog COALESCE(V1,V2)
+  Local Integer ISNULL,V1T : V1T=type(V1)
+  If find(V1T,1,2,4,5,6,7)
+    ISNULL=(V1=0)
+  Elsif V1T=3
+    ISNULL=(V1=[0/0/0])
+  Elsif (V1T>10 and V1T<500) or V1T=523
+    ISNULL=(V1="")
+  Endif
+  If ISNULL
+    End V2
+  Endif
+End V1
+
+
+##################################################
+# Sostituzione di una stringa con un'altra
+##################################################
+
+Subprog REPLACE(TEXTE,AVANT,APRES)
+  Variable Char   TEXTE ()
+  Value    Char AVANT ()
+  Value    Char APRES ()
+  Local    Integer IYA,START
+  IYA=1 : START=1
+  While IYA
+    IYA = instr(START,TEXTE,AVANT)
+    If IYA
+      TEXTE=left$(TEXTE,IYA-1)+APRES+right$(TEXTE,IYA+len(AVANT))
+      START = IYA+len(APRES)
+    Endif
+  Wend
+End
+
+
+Subprog REPLACE_CLB(TEXTE,AVANT,APRES)
+  Variable Clbfile TEXTE ()
+  Value    Char AVANT ()
+  Value    Char APRES ()
+  Local    Integer IYA,START
+  IYA=1 : START=1
+  While IYA
+    IYA = instr(START,TEXTE,AVANT)
+    If IYA
+      TEXTE=left$(TEXTE,IYA-1)+APRES+right$(TEXTE,IYA+len(AVANT))
+      START = IYA+len(APRES)
+    Endif
+  Wend
+End
+
+##################################################
+# Trimming di caratteri personalizzati dalle stringhe
+##################################################
+
+Funprog TRIM(STR,CAR)
+  Value Char STR,CAR
+
+  Local Integer I1,I2
+  For I1=1 To len(STR)
+    If instr(1,CAR,mid$(STR,I1,1))=0
+      Break
+    Endif
+  Next
+  If I1>len(STR) : End "" : Endif
+  For I2=len(STR) To 1 Step -1
+    If instr(1,CAR,mid$(STR,I2,1))=0
+      Break
+    Endif
+  Next
+End mid$(STR,I1,I2-I1+1)
+
+##################################################
+# Sostituzione di una parte di testo dichiarata come commento, con un unico carattere
+# Esempio: Prova~1=1~Ok~123~~~456, Car ~ dichiarato come tag commento -> Esito: Prova ok 456
+##################################################
+
+Subprog REPLACE_COMM(STR,CAR,SOST)
+  Variable Char STR,SOST
+  Value Char CAR
+
+  Local Integer I1,S1,S2,YOK
+  Local Char YRPL(250)
+  YOK = 1
+
+  While YOK
+    Raz I1,S1,S2,YRPL
+    For I1=1 To len(STR)
+      If instr(1,mid$(STR,I1,1),CAR)
+        If S1=0
+          S1=I1
+        Else
+          S2=I1
+          Break
+        Endif
+      Endif
+    Next
+
+    If S1<>0 and S2<>0  # Se ho un replace di commento lo effettuo, altrimenti esco
+      YRPL = mid$(STR,S1,S2-S1+1)
+      Call REPLACE(STR,YRPL,SOST)
+    Else
+      YOK=0
+    Endif
+  Wend
+
+End
+
+##################################################
+# Cast per portare da stringa GMA a formato data
+# Esempio: "3/9/21" -> Esito: [03/09/2021]
+##################################################
+
+Subprog STR_TO_DATE(YSTR,YDAT)
+  Value Char YSTR
+  Variable Date YDAT
+
+  Local Char RESULT(5)(5)
+  Local Integer NUMRES
+
+  Call YSPLIT(YSTR,"/",RESULT,NUMRES)
+  If NUMRES < 3 : Raz YDAT : End : Endif
+
+  YDAT = gdat$(val(RESULT(0)),val(RESULT(1)),val(RESULT(2)))
+
+End
+
+#####################################################
+
+Funprog GET_MESS(JVALUE, CODFIC, CODZON)
+
+  Value Char JVALUE
+  Value Char CODFIC
+  Value Char CODZON
+
+  Local File ATABZON    [ATZ]
+  Read [ATZ]CODTYP = 'M';CODFIC;CODZON
+  If fstat = 0
+    End mess(val(JVALUE), [ATZ]NOLIB, 1)
+  Else
+    End AVOID.ACHAR
+  Endif
+
+End AVOID.ACHAR
+
+######################################################
+#**
+#* Stampa di un Clob in un file sulla Crt "tmp",dato il Nome e l'estensione
+#*
+#* @param YCLBFILE Clob da scrivere in un file
+#* @param YFILENAME Nome del file su cui scrivere il clob
+#* @param YEXTENSION Estensione del file su cui scrivere il clob
+#*!
+
+Subprog YPRINT_CLB(YCLBFILE, YFILENAME, YEXTENSION)
+
+  Value Clbfile YCLBFILE
+  Value Char YFILENAME
+  Value Char YEXTENSION
+
+  Local Char YNOW(50) : YNOW = func YFORMATDATE(num$(datetime$),"DT")
+  Local Char YFILA(250) : YFILA=filpath("tmp", YFILENAME + "_" + YNOW, YEXTENSION)
+  Openo YFILA Using [YF1]
+  Iomode adxifs ";" Using [YF1]
+  Iomode adxium GUTF8 Using [YF1]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF1]
+  Wrseq YCLBFILE Using [YF1]
+  Openo Using [YF1]
+
+End
+
+######################################################
+#**
+#* Stampa di un Clob in un file data la Crt ambiente, il Nome e l'estensione
+#*
+#* @param YLOGDIR Nome Cartella ambiente in cui creare il file
+#* @param YCLBFILE Clob da scrivere in un file
+#* @param YFILENAME Nome del file su cui scrivere il clob
+#* @param YEXTENSION Estensione del file su cui scrivere il clob
+#*!
+
+Subprog YPRINT_DIR_CLB(YLOGDIR, YCLBFILE, YFILENAME, YEXTENSION)
+
+  Value Char YLOGDIR
+  Value Clbfile YCLBFILE
+  Value Char YFILENAME
+  Value Char YEXTENSION
+
+  Local Char YNOW(50) : YNOW = func YFORMATDATE(num$(datetime$),"DT")
+  Local Char YFILA(250) : YFILA=filpath(YLOGDIR, YFILENAME + "_" + YNOW, YEXTENSION)
+  Openo YFILA Using [YF1]
+  Iomode adxifs ";" Using [YF1]
+  Iomode adxium GUTF8 Using [YF1]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF1]
+  Wrseq YCLBFILE Using [YF1]
+  Openo Using [YF1]
+
+End
+
+######################################################
+
+Subprog YPRINT_TEXT(YTEXT, YFILENAME, YEXTENSION)
+
+  Value Char YTEXT
+  Value Char YFILENAME
+  Value Char YEXTENSION
+
+  Local Char YNOW(50) : YNOW = func YFORMATDATE(num$(datetime$),"DT")
+  Local Char YFILA(250) : YFILA=filpath("tmp", YFILENAME + "_" + YNOW, YEXTENSION)
+  Openo YFILA Using [YF1]
+  Iomode adxifs ";" Using [YF1]
+  Iomode adxium GUTF8 Using [YF1]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF1]
+  Wrseq YTEXT Using [YF1]
+  Openo Using [YF1]
+
+End
+
+######################################################
+#**
+#* Metodo per ottenere il format desiderato di una struttura stringa datetime.
+#* "D" --> date : AAAA-MM-DD , "T" --> time : hh:mm:ss , "DT" --> AAAA-MM-DD hh:mm:ss
+#*
+#* @param YDATETIME Stringa con struttura DateTime
+#* @param YFORMAT_TYPE Formato che si vuole in output (D: data, T: time, DT: datetime)
+#*!
+Funprog YFORMATDATE(YDATETIME, YFORMAT_TYPE)
+
+  Value Char YDATETIME
+  Value Char YFORMAT_TYPE
+  Local Char YRESULT(50)
+
+  # RIMUOVO EVENTUALI DOPPI APICI E NORMALIZZO IL FORMATO DEL Datetime
+  # (SOSTITUISCO "/" CON "-" E "." CON ":" E RIMUOVO DOPPI APICI)
+  YDATETIME = ctrans(ctrans(ctrans(YDATETIME, "/", "-"), ".", ":"), chr$(22), "")
+
+  Case YFORMAT_TYPE
+    When "D"
+      # PRENDO SOLO LA PARTE DELLA DATA (PRIMI 10 CARATTERI) E RIMUOVO I SEPARATORI
+      YRESULT = ctrans(mid$(YDATETIME, 1, 10), "-", "")
+
+    When "T"
+      # PRENDO SOLO LA PORZIONE DEL "time" (12° AL 19° CARATTERE) E RIMUOVO I SEPARATORI
+      YRESULT = ctrans(mid$(mid$(YDATETIME, 1, 19), 12, 8), ":", "")
+
+    When "DT"
+      # TRONCO DOPO I MILLISECONDI (FINO A 17 CARATTERI), RIMUOVO LA "T" E I SEPARATORI
+#      YRESULT = ctrans(ctrans(mid$(YDATETIME, 1, 17), "T", ""), "-", "")
+#      YRESULT = ctrans(YRESULT, ":", "")
+      YRESULT = ctrans(ctrans(ctrans(mid$(YDATETIME, 1, 17), "T", ""), "-", ""), ":", "")
+
+    When Default
+      # RESTITUISCO STRINGA DI ERRORE SE IL TIPO NON È VALIDO
+      YRESULT = "Formato non valido"
+  Endcase
+
+End YRESULT
+
+# Ritorna il datetime corrente localizzato (datetime$ torna il datetime corrente sul meridiano di greenwich)
+Funprog YDATETIME_NOW
+  Case(GACTX.LAN)
+    When "ITA", "SWE", "DEU", "FRA", "ESP" :
+      End func TIMEZONE_CSTD.TO_LOCAL('W. Europe Standard Time', datetime$)
+    When "GBR", "IRL" :
+      End func TIMEZONE_CSTD.TO_LOCAL('GMT Standard Time', datetime$)
+    When "USA", "CAN" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Eastern Standard Time', datetime$)
+    When "AUS" :
+      End func TIMEZONE_CSTD.TO_LOCAL('AUS Eastern Standard Time', datetime$)
+    When "JPN" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Tokyo Standard Time', datetime$)
+    When "CHN" :
+      End func TIMEZONE_CSTD.TO_LOCAL('China Standard Time', datetime$)
+    When "IND" :
+      End func TIMEZONE_CSTD.TO_LOCAL('India Standard Time', datetime$)
+    When "BRA" :
+      End func TIMEZONE_CSTD.TO_LOCAL('E. South America Standard Time', datetime$)
+    When "RUS" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Russian Standard Time', datetime$)
+    When "ZAF" :
+      End func TIMEZONE_CSTD.TO_LOCAL('South Africa Standard Time', datetime$)
+    When "ARE" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Arabian Standard Time', datetime$)
+    When "SGP" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Singapore Standard Time', datetime$)
+    When "NZL" :
+      End func TIMEZONE_CSTD.TO_LOCAL('New Zealand Standard Time', datetime$)
+    When "MEX" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Central Standard Time', datetime$)
+    When "ARG" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Argentina Standard Time', datetime$)
+    When "KOR" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Korea Standard Time', datetime$)
+    When "SAU" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Arabian Standard Time', datetime$)
+    When "TUR" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Turkey Standard Time', datetime$)
+    When "ISR" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Israel Standard Time', datetime$)
+    When "EGY" :
+      End func TIMEZONE_CSTD.TO_LOCAL('Egypt Standard Time', datetime$)
+    When "THA" :
+      End func TIMEZONE_CSTD.TO_LOCAL('SE Asia Standard Time', datetime$)
+    When "NLD" :
+      End func TIMEZONE_CSTD.TO_LOCAL('W. Europe Standard Time', datetime$)
+    When "BEL" :
+      End func TIMEZONE_CSTD.TO_LOCAL('W. Europe Standard Time', datetime$)
+    When "PRT" :
+      End func TIMEZONE_CSTD.TO_LOCAL('GMT Standard Time', datetime$)
+    When "CHE" :
+      End func TIMEZONE_CSTD.TO_LOCAL('W. Europe Standard Time', datetime$)
+    When "AUT" :
+      End func TIMEZONE_CSTD.TO_LOCAL('W. Europe Standard Time', datetime$)
+    When Default:
+      End datetime$ #GMT - Meridiano di greenwich
+  Endcase
+End datetime$
+
+###########################################################################################################
+#**
+#* Funzione che ritorna il TimeStamp (Data-Ora-millesimi)
+#*!
+
+Funprog YGET_TIMESTAMP()
+  Local Char YTIME_STAMP(30): YTIME_STAMP = format$("D:YY[.]MM[.]DD[_]hh[.]mm[.]ss", date$) +  "." + format$("N0:3#", mod(val(timestamp$), 1000))
+End YTIME_STAMP
+
+###########################################################################################################
+
+$JSON_RESPONSE_BUILDER
+
+  Local Clbfile RESPONSE(0)
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Case fstat
+    When 0,2
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 1)
+    When 1
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", LOCKED, 0)
+      RESPONSE += func YJSONSERIALIZE.GET_STR("message", "La tabella è bloccata.", 1)
+    When 3
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", CONFLICT, 0)
+      RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Tentativo di creare un valore chiave duplicato.", 1)
+    When 4
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+      RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Raggiunto inizio o fine della tabella.", 1)
+    When 7
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", NOT_FOUND, 0)
+      RESPONSE += func YJSONSERIALIZE.GET_STR("message", "La classe non esiste (nessuna tabella aperta con l'abbreviazione corrispondente).", 1)
+    When 27
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", BAD_REQUEST, 0)
+      RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Tentativo di scrittura su un'abbreviazione Link.", 1)
+    When 44, 65
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INSUFFICIENT_STORAGE, 0)
+      RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Spazio insufficiente per creare nuove righe.", 1)
+    When 75
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+      RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore del database.", 1)
+    When Default
+      RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+      RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore sconosciuto durante la scrittura.", 1)
+  Endcase
+
+  YRESPONSE = func YJSONSERIALIZE.GET_JSON(RESPONSE)
+
+Return
+
+###########################################################################################################
+
+Funprog YGET_PASSWORD()
+
+    Local Char YLOWERCASE_CHARS(50) : YLOWERCASE_CHARS = "abcdefghijklmnopqrstuvwxyz"
+    Local Char YUPPERCASE_CHARS(50): YUPPERCASE_CHARS = toupper(YLOWERCASE_CHARS)
+    Local Char YNUMBERS(10) : YNUMBERS = "0123456789"
+    Local Char YSPECIALCHRS(25): YSPECIALCHRS = "\|!£$%&/()=?@-<>#_*+]["
+    Local Char YALL_CHARS(150): YALL_CHARS = YLOWERCASE_CHARS + YUPPERCASE_CHARS + YNUMBERS + YSPECIALCHRS
+    Local Char YPASSWORD(1)(10)
+    Local Integer YNUM, YI, YJ, YSEED
+    Local Char YTEMP(1), YPASSWORD_STR(10)
+
+    # Genera i primi 4 caratteri rispettando i criteri
+    YPASSWORD(0) = xgetchar(YLOWERCASE_CHARS, fix(rnd(len(YLOWERCASE_CHARS)) + 1))
+    YPASSWORD(1) = xgetchar(YUPPERCASE_CHARS, fix(rnd(len(YUPPERCASE_CHARS)) + 1))
+    YPASSWORD(2) = xgetchar(YNUMBERS, fix(rnd(len(YNUMBERS)) + 1))
+    YPASSWORD(3) = xgetchar(YSPECIALCHRS, fix(rnd(len(YSPECIALCHRS)) + 1))
+
+    # Riempie i rimanenti caratteri con valori casuali
+    For YI=4 To dim(YPASSWORD,1)-1
+      YPASSWORD(YI) = xgetchar(YALL_CHARS, fix(rnd(len(YALL_CHARS)) + 1))
+    Next
+
+    # Mescolamento della password per maggiore casualità
+    For YI=0 To dim(YPASSWORD,1)-1
+      YJ = fix(rnd(dim(YPASSWORD,1))) # Numero casuale tra 0 e dim-1
+      YTEMP = YPASSWORD(YJ)
+      YPASSWORD(YJ) = YPASSWORD(YI)
+      YPASSWORD(YI) = YTEMP
+    Next
+
+    # Creazione della stringa finale della password
+    For YI=0 To dim(YPASSWORD,1)-1
+      YPASSWORD_STR += YPASSWORD(YI)
+    Next
+
+End YPASSWORD_STR
+
+###########################################################################################################
+
+Funprog YCHECK_PASSWORD(YPASSWORD)
+  Value Char YPASSWORD
+
+  Local Char YLOWERCASE_CHARS(50) : YLOWERCASE_CHARS = "abcdefghijklmnopqrstuvwxyz"
+  Local Char YUPPERCASE_CHARS(50): YUPPERCASE_CHARS = toupper(YLOWERCASE_CHARS)
+  Local Char YNUMBERS(10) : YNUMBERS = "0123456789"
+  Local Char YSPECIALCHRS(25): YSPECIALCHRS = "\|!£$%&/()=?@-<>.#,;_*+]["
+  Local Integer YHAS_LOWER, YHAS_UPPER, YHAS_NUMBER, YHAS_SPECIAL, YI
+
+  # Inizializza flag per i criteri
+  YHAS_LOWER = 0
+  YHAS_UPPER = 0
+  YHAS_NUMBER = 0
+  YHAS_SPECIAL = 0
+  YHAS_VALID_LENGHT = func YUTILS.IIF(len(YPASSWORD) >= 8, 1, 0)   #LUNGHEZZA ALMENO 8 CARATTERI
+
+  # Check for lowercase letter
+  For YI = 1 To len(YLOWERCASE_CHARS)
+    If instr(1, YPASSWORD, mid$(YLOWERCASE_CHARS,YI,1)) <> 0
+      YHAS_LOWER = 1
+      Break
+    Endif
+  Next
+
+  # Check for uppercase letter
+  For YI = 1 To len(YUPPERCASE_CHARS)
+    If instr(1, YPASSWORD, mid$(YUPPERCASE_CHARS,YI,1)) <> 0
+      YHAS_UPPER = 1
+      Break
+    Endif
+  Next
+
+  # Check for number
+  For YI = 1 To len(YNUMBERS)
+    If instr(1, YPASSWORD, mid$(YNUMBERS,YI,1)) <> 0
+      YHAS_NUMBER = 1
+      Break
+    Endif
+  Next
+
+  # Check for special character
+  For YI = 1 To len(YSPECIALCHRS)
+    If instr(1, YPASSWORD, mid$(YSPECIALCHRS,YI,1)) <> 0
+      YHAS_SPECIAL = 1
+      Break
+    Endif
+  Next
+
+  # Verifica se tutti i criteri sono rispettati
+#Infbox "YHAS_LOWER" - num$(YHAS_LOWER) - "- YHAS_UPPER:" - num$(YHAS_UPPER) - "- YHAS_NUMBER" - num$(YHAS_NUMBER) - "- YHAS_SPECIAL" - num$(YHAS_SPECIAL)
+  If YHAS_LOWER = 1 and YHAS_UPPER = 1 and YHAS_NUMBER = 1 and YHAS_SPECIAL = 1 & YHAS_VALID_LENGHT = 1
+    End 1
+  Else
+    End 0
+  Endif
+
+End
+
+##################################################################################################################
+Funprog ENCODE_URL(_URL)
+  Variable Char _URL
+  Local Char CHR(1)
+  Local Char URL(250)
+
+  For I=1 To len(_URL)
+    CHR = mid$(_URL,I,1)
+    If find(CHR,",","/","?",":","@","&","=","+","#"," ",'"',"'","%")
+      URL += "%40"
+    Else
+      URL+= CHR
+    Endif
+  Next
+End URL
+
+
+###################################################################################################################
+#                                            GESTIONE FILE SYSTEM
+###################################################################################################################
+#**
+#* Creazione Cartella dato il Percorso ed il Nome
+#*
+#* @param YDIRPATH Percorso della crt da creare
+#* @param YDIRNAME Nome della crt da creare
+#*!
+Subprog YCREATE_DIRECTORY(YDIRPATH,YDIRNAME)
+
+  Value Char YDIRPATH
+  Value Char YDIRNAME
+
+  Local Char YDIR(250):YDIR = YDIRPATH+"\"+YDIRNAME
+  Local Integer YSTAT
+  Call SYSTEME (adxmac(0),"ae_mkdir"-'"'+YDIR+'"',"",YSTAT) From ORDSYS
+End
