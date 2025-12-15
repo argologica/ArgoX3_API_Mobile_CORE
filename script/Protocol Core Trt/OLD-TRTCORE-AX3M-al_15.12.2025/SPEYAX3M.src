@@ -1,0 +1,59 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+
+  Case ACTION
+    When "OUVRE"      : Gosub OUVRE
+    When "DEBUT"      : Gosub DEBUT
+  Endcase
+
+Return
+
+###################################################################################################
+
+$OUVRE
+
+  Local Blbfile QRGPLAYSTORE_BLB, QRAPPLESTORE_BLB, QRCONFIG_BLB
+  Local Clbfile QRBASE64_CLB(3)
+  Local Integer COUNT
+  Local Char SUCCESS(5), MESSAGE(250)
+  Local Char PCOD(100)(1..10),PVAL(100)(1..10)
+
+  #Qui estraggo il Dossier in cui sono presente [il servizio REST avrà sempre questa dicitura : AX3M_API_PROD, AX3M_API_SVIL, ecc]
+  Local Char YDOSSIER(6): YDOSSIER = toupper(nomap(0))
+
+Return
+
+##################################################################################################
+
+$DEBUT
+
+  #QR ANDROID
+  Call EXEC("AX3M_API_"+YDOSSIER, "GET", "api", "/Qr/GetGooglePlayStoreLink/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS
+  #Call EXEC("AX3M_API_Prod", "GET", "api", "/Qr/GetGooglePlayStoreLink/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS     #old
+
+  COUNT = b64Decode( QRBASE64_CLB, QRGPLAYSTORE_BLB )
+  [M:YAX3M]YQRANDROID = QRGPLAYSTORE_BLB
+
+  Affzo [M:YAX3M]YQRANDROID
+
+  #QR APPLE
+  Raz QRBASE64_CLB, PCOD, PVAL
+  Call EXEC("AX3M_API_"+YDOSSIER, "GET", "api", "/Qr/GetAppleStoreLink/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS
+  #Call EXEC("AX3M_API_Prod", "GET", "api", "/Qr/GetAppleStoreLink/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS     #old
+
+  COUNT = b64Decode( QRBASE64_CLB, QRAPPLESTORE_BLB )
+  [M:YAX3M]YQRAPPLE = QRAPPLESTORE_BLB
+
+  Affzo [M:YAX3M]YQRAPPLE
+
+  #QR CONFIG
+  Raz QRBASE64_CLB, PCOD, PVAL
+  Call EXEC("AX3M_API_"+YDOSSIER, "GET", "api", "/Qr/GetConfig/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS
+  #Call EXEC("AX3M_API_Prod", "GET", "api", "/Qr/GetConfig/", PCOD, PVAL, "{}", QRBASE64_CLB) From YRESTWS   #old
+
+  COUNT = b64Decode( QRBASE64_CLB, QRCONFIG_BLB )
+  [M:YAX3M]YQRCONFIG = QRCONFIG_BLB
+
+  Affzo [M:YAX3M]YQRCONFIG
+
+Return

@@ -1,0 +1,541 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+##############################################################################################
+##############################################################################################
+############################################# UTENTI #########################################
+##############################################################################################
+##############################################################################################
+Subprog YUPSERT_USR(YUSERNAME, YX3USERNAME, YNOMUSR, YEMAIL, YENAFLG, YISDEMO, YHASH, YSALT, YRESPONSE)
+
+  Variable Char YUSERNAME
+  Variable Char YX3USERNAME
+  Variable Char YNOMUSR
+  Variable Char YEMAIL
+  Variable Integer YENAFLG
+  Variable Integer YISDEMO
+  Variable Char YHASH
+  Variable Char YSALT
+
+  Variable Clbfile YRESPONSE
+
+  Local File YAX3MUSER [F:YAX3MU]
+  Local Integer YI
+  Local Char YPASSWORD(50)
+  Local Char YKEYVALUES(250)(2,3)
+  Local Char YCREDENTIALS(250)(2)
+  Local Char PCOD(100)(1), PVAL(100)(1)
+  Local Char YRESPONSE_ARR(250)(func YJSONDESERIALIZE.F_MAXELEMENT(), func YJSONDESERIALIZE.F_DEEPLEVEL() + 1)
+  Local Clbfile YRESPONSE_JSON(1), YBODY(1)
+  Local Integer EXIST_USER : EXIST_USER = 0
+
+  Call OUVRE_TRACE ("YAX3MUSR - Creazione/Aggiornamento Utente ArgoX3 Mobile" - num$(date$)) From LECFIC
+
+  Trbegin [F:YAX3MU]
+  Readlock [F:YAX3MU]YAX3MU0 = YUSERNAME
+  EXIST_USER = func YUTILS.IIF(fstat = 0, 1, 0)
+
+  # Insert record into table
+  [F:YAX3MU]USERNAME     = YUSERNAME
+  [F:YAX3MU]X3USERNAME   = YX3USERNAME
+  [F:YAX3MU]NOMUSR       = YNOMUSR
+  [F:YAX3MU]EMAIL        = YEMAIL
+  [F:YAX3MU]ENAFLG       = YENAFLG
+  [F:YAX3MU]ISDEMO       = YISDEMO
+  [F:YAX3MU]PASSWORDHASH = YHASH
+  [F:YAX3MU]PASSWORDSALT = YSALT
+
+  Local Integer YOPERATION : YOPERATION = 1
+  #non esiste l'utente
+  If EXIST_USER <> 1
+    Write [F:YAX3MU]
+  Else
+    Rewrite [F:YAX3MU]
+  Endif
+
+  Gosub GET_WS_CONSTANTS From YUTILS
+  If fstat
+    YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+    YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+  Else
+    If fstat = 0
+      Commit
+      If fstat = 0
+        YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 0)
+        YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Utente" - func YUTILS.STR_IIF(EXIST_USER = 2, "inserito", "aggiornato") - "con successo!" , 1)
+      Else
+        Rollback
+        YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+        YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+      Endif
+    Else
+      Rollback
+      YRESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 0)
+      YRESPONSE += func YJSONSERIALIZE.GET_STR("message", "Errore interno!", 1)
+    Endif
+  Endif
+
+  Raz [F:YAX3MU]
+  YRESPONSE = func YJSONSERIALIZE.GET_JSON(YRESPONSE)
+
+End
+
+#########################################################################################
+Subprog YCHECK_USER(YUSERNAME, YRESPONSE)
+
+  Value Char YUSERNAME
+  Variable Clbfile YRESPONSE
+
+  Gosub GET_CONSTANTS From YUTILS
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Local File YAX3MUSER [YAX3MU]
+
+  Columns [F:YAX3MU](PASSWORDHASH,PASSWORDSALT)
+  Read [F:YAX3MU]YAX3MU0=YUSERNAME
+
+  Clbfile RESPONSE(0)
+  If fstat = 0
+    RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 0)
+    RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Utente trovato!", 0)
+    Local Char USER_DATA(250)(3)
+    USER_DATA(0) = func YJSONSERIALIZE.GET_STR("username", YUSERNAME, 1)
+    USER_DATA(1) = func YJSONSERIALIZE.GET_STR("passwordHash", [F:YAX3MU]PASSWORDHASH, 1)
+    USER_DATA(2) = func YJSONSERIALIZE.GET_STR("passwordSalt", [F:YAX3MU]PASSWORDSALT, 1)
+    RESPONSE += func YJSONSERIALIZE.GET_STROBJ("data", USER_DATA, 0, 1)
+  Else
+    RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", NOT_FOUND, 0)
+    RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Utente inesistente!", 1)
+  Endif
+
+  YRESPONSE = func YJSONSERIALIZE.GET_JSON(RESPONSE)
+
+End
+
+################################################################################
+Subprog YFIND_BYEMAIL(YEMAIL, YRESPONSE)
+  Value Char YEMAIL
+  Variable Clbfile YRESPONSE
+
+  Local Char USERNAME(30), X3USERNAME(5), NOMUSR(30), EMAIL(80)
+  Local Integer ENABLED, UCOUNT
+
+  Local Char FIELDS(250)(5)
+
+  Local File YAX3MUSER [YAX3MU]
+
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Filter[YAX3MU] Where tolower([YAX3MU]EMAIL) = tolower(YEMAIL)
+
+  Read [YAX3MU] First
+
+  FIELDS(0) = func YJSONSERIALIZE.GET_STR("username", [YAX3MU]USERNAME, 1)
+  FIELDS(1) = func YJSONSERIALIZE.GET_STR("x3username", [YAX3MU]X3USERNAME, 1)
+  FIELDS(2) = func YJSONSERIALIZE.GET_STR("nomusr", [YAX3MU]NOMUSR, 1)
+  FIELDS(3) = func YJSONSERIALIZE.GET_STR("email", [YAX3MU]EMAIL, 1)
+  FIELDS(4) = func YJSONSERIALIZE.GET_BOOL("enabled", func YUTILS.IIF([YAX3MU]ENAFLG = 2, 1, 0), 1)
+
+  # Creazione payload output
+  Append YRESPONSE, func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+  If fstat = 0
+    Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 0)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_STROBJ("data", FIELDS, 0, 1)
+  Else
+    Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", NOT_FOUND, 0)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non trovato!", 1)
+  Endif
+  Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+End
+
+################################################################################
+# Subprog: YFIND_BYRESETTOKEN
+# Scopo:
+#   Ricerca un utente in anagrafica utenti tramite token hash
+# Valore di ritorno:
+#   YRESPONSE contenente JSON
+################################################################################
+Subprog YFIND_BYRESETTOKEN(YTOKENHASH, YRESPONSE)
+  Value Char YTOKENHASH
+  Variable Clbfile YRESPONSE
+
+  Local Datetime EXPIRY
+  Local Char USERNAME(100), EMAIL(100)
+  Local Integer ENABLED
+  Local Clbfile DATA_FIELDS(1)(0..)
+  Local Integer DATA_COUNT
+  Local Clbfile RESPONSE_FIELDS(1)(0..)
+  Local Integer RESP_COUNT
+
+  Local File YAX3MUSER [YAX3MUSR]
+  Local File YAX3MPWRESTK [YAX3MPR]
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  # Inizializzo
+  Raz RESPONSE_FIELDS : RESP_COUNT = 0
+
+  # Lettura record
+  Link [YAX3MPR] With  [YAX3MUSR]YAX3MU0~=[YAX3MPR]USERNAME As [YUSRLNK]
+&                Where [YAX3MPR]TOKENHASH=YTOKENHASH
+
+  Read [YUSRLNK] First
+
+
+  If fstat <> 0
+    # Token non trovato
+    RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_INT("statusCode", NOT_FOUND, 1) : RESP_COUNT += 1
+    RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_STR("message", "Token non trovato", 1) : RESP_COUNT += 1
+  Else
+
+    # Recupero campi
+    EXPIRY = [YAX3MPR]EXPIRY
+    USERNAME = [YAX3MPR]USERNAME
+    EMAIL = [YAX3MUSR]EMAIL
+    ENABLED = [YAX3MUSR]ENAFLG
+
+    # Controllo scadenza
+    If EXPIRY <= datetime$
+      RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_INT("statusCode", UNAUTHORIZED, 1) : RESP_COUNT += 1
+      RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_STR("message", "Token di reset scaduto", 1) : RESP_COUNT += 1
+    Else
+      # --- Costruzione oggetto Data (utente) ---
+      Raz DATA_FIELDS : DATA_COUNT = 0
+      DATA_FIELDS(DATA_COUNT) = func YJSONSERIALIZE.GET_STR("username", USERNAME, 2) : DATA_COUNT += 1
+      DATA_FIELDS(DATA_COUNT) = func YJSONSERIALIZE.GET_STR("email", EMAIL, 1) : DATA_COUNT += 1
+      DATA_FIELDS(DATA_COUNT) = func YJSONSERIALIZE.GET_BOOL("enabled", func YUTILS.IIF(ENABLED = 2, 1, 0), 1) : DATA_COUNT += 1
+
+      # --- Risposta finale OK ---
+      Raz RESPONSE_FIELDS : RESP_COUNT = 0
+      RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 1) : RESP_COUNT += 1
+      RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_CLBOBJ("data", DATA_FIELDS, 0, 1) : RESP_COUNT += 1
+      RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_STR("message", "Token valido", 1) : RESP_COUNT += 1
+    Endif
+
+  Endif
+
+  YRESPONSE = func YJSONSERIALIZE.GET_CLBOBJ(AVOID.ACHAR, RESPONSE_FIELDS, 1, 1)
+
+End
+
+################################################################################
+# Aggiorna hash e expiry
+Subprog YSAVE_RESETTOKEN(YUSERNAME, YTOKENHASH, YEXPIRY, YRESPONSE)
+  Value Char YUSERNAME
+  Value Char YTOKENHASH
+  Value Char YEXPIRY
+  Variable Clbfile YRESPONSE
+
+  Local Integer YSTATUS
+  Local Char YMESSAGE(250)
+
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Local File YAX3MUSER [YAX3MUSR]
+  Local File YAX3MPWRESTK [YAX3MPR]
+
+  Read [YAX3MUSR]YAX3MU0 = YUSERNAME
+  If fstat = 0
+
+    Trbegin [YAX3MPR]
+    Delete [YAX3MPR] Where USERNAME = YUSERNAME
+
+    [YAX3MPR]USERNAME = YUSERNAME
+    [YAX3MPR]TOKENHASH = YTOKENHASH
+    [YAX3MPR]EXPIRY =  gdatetime$(YEXPIRY) # YEXPIRY deve essere cosi formattato: YYYY-MM-DDTHH:MM:SSZ
+
+    Write [YAX3MPR]
+
+    If !fstat
+      Commit
+      YSTATUS = SUCCESS
+      YMESSAGE = 'Salvataggio token avvenuto con successo!'
+    Else
+      Rollback
+      YSTATUS = INTERNAL_SERVER_ERROR
+      YMESSAGE = 'Errore interno: impossibile salvare il token.'
+    Endif
+
+  Else
+    YSTATUS = NOT_FOUND
+    YMESSAGE = 'Utente inesistente: impossibile salvare il token.'
+  Endif
+
+
+  Append YRESPONSE, func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+  Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", YSTATUS, 0)
+  Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", YMESSAGE, 1)
+  Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+End
+
+################################################################################
+
+Subprog YUPDATE_PASSWORD(YUSERNAME, YNEWHASH, YNEWSALT, YRESPONSE)
+  Value Char YUSERNAME
+  Value Char YNEWHASH
+  Value Char YNEWSALT
+
+  Variable Clbfile YRESPONSE
+
+  Local Integer YSTATUS
+  Local Char YMESSAGE(250)
+
+  Local File YAX3MUSER [YAX3MU]
+
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Read [F:YAX3MU]YAX3MU0 = YUSERNAME
+
+  If fstat = 0
+
+    Trbegin [YAX3MU]
+
+    [F:YAX3MU]PASSWORDHASH = YNEWHASH
+    [F:YAX3MU]PASSWORDSALT = YNEWSALT
+
+    Rewrite [YAX3MU]
+
+    If !fstat
+      Commit
+      YSTATUS = SUCCESS
+      YMESSAGE = 'Aggiornamento password avvenuto con successo!'
+    Else
+      Rollback
+      YSTATUS = INTERNAL_SERVER_ERROR
+      YMESSAGE = 'Errore interno: aggiornamento password fallito!'
+    Endif
+
+  Else
+    YSTATUS = NOT_FOUND
+    YMESSAGE = 'Utente inesistente: impossibile aggiornare la password!'
+  Endif
+
+  Append YRESPONSE, func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+  Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", YSTATUS, 0)
+  Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", YMESSAGE, 1)
+  Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+End
+
+################################################################################
+
+Subprog YCLEAR_RESETTOKEN(YUSERNAME, YRESPONSE)
+  Value Char YUSERNAME
+  Variable Clbfile YRESPONSE
+
+  Local Integer YSTATUS
+  Local Char YMESSAGE(250)
+
+  Local File YAX3MPWRESTK [YAX3MPR]
+
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Read [YAX3MPR]YAX3MPR1 = YUSERNAME
+
+  If fstat = 0
+
+    Trbegin [YAX3MPR]
+
+    [YAX3MPR]TOKENHASH = AVOID.ACHAR
+    [YAX3MPR]EXPIRY = AVOID.ADATE
+
+    Rewrite [YAX3MPR]
+
+    If !fstat
+      Commit
+      YSTATUS = SUCCESS
+      YMESSAGE = 'Reset avvenuto con successo!'
+    Else
+      Rollback
+      YSTATUS = INTERNAL_SERVER_ERROR
+      YMESSAGE = 'Errore interno: impossibile resettare il token.'
+    Endif
+  Else
+    YSTATUS = NOT_FOUND
+    YMESSAGE = 'Utente inesistente: impossibile salvare il token.'
+  Endif
+
+  Append YRESPONSE, func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+  Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", YSTATUS, 0)
+  Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", YMESSAGE, 1)
+  Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+End
+
+##########################################################################################
+##########################################################################################
+########################################### JWT ##########################################
+##########################################################################################
+##########################################################################################
+
+Subprog YCHECK_REFRESH_TOKEN(YUSERNAME, YREFRESHTOKEN, YRESPONSE)
+  Value Char YUSERNAME
+  Value Char YREFRESHTOKEN
+  Variable Clbfile YRESPONSE
+
+  Gosub GET_CONSTANTS From YUTILS
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Local Char REFRESHTOKEN_QUERY(250)
+  #"select APIKEY_0, RTEXPIRACY_0, RT_VALID_0 from YAX3ATOKEN where APIKEY_0 = '" + YAPIKEY + "' and REFRESHTOKEN_0 = '" + YREFRESHTOKEN + "'"
+  REFRESHTOKEN_QUERY = "select USERNAME_0, RTEXPIRACY_0, RT_VALID_0 from YAX3MUSERTOK where USERNAME_0 = '" + YUSERNAME + "' and REFRESHTOKEN_0 = '" + YREFRESHTOKEN + "'"
+
+  Local Tinyint IS_INVALIDTOKEN
+  Local File YAX3MUSERTOK [YAX3MUT]
+
+  For (Char YCURR_USERNAME, Datetime YCURR_RTEXPIRACY, Tinyint YCURR_RTVALID) From num$(GTYPDBA*2+1) Sql REFRESHTOKEN_QUERY As [YAX3A]
+    IS_INVALIDTOKEN = func YUTILS.IIF(YCURR_USERNAME = AVOID.ACHAR, 2, 1)
+    IS_RTEXPIRED = func YUTILS.IIF((YCURR_RTEXPIRACY < datetime$) | (YCURR_RTVALID = FALSE), 2, 1)
+  Next
+
+  Clbfile RESPONSE(0)
+  If IS_INVALIDTOKEN = TRUE | IS_RTEXPIRED = TRUE
+    RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", UNAUTHORIZED, 0)
+    RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Refresh token non valido o scaduto!", 1)
+  Else
+    #AGGIORNA IL TOKEN DI AGGIORNAMENTO COME NON PIU' VALIDO
+    Local Char INV_RT_QUERY(250)
+    INV_RT_QUERY = "update YAX3MUSERTOK set RT_VALID_0 = " + num$(FALSE) + " where USERNAME_0 = '" + YUSERNAME + "' and REFRESHTOKEN_0 = '" + YREFRESHTOKEN + "'"
+
+    Trbegin [YAX3MUT]
+
+    Execsql From num$(GTYPDBA*2+1) Sql INV_RT_QUERY
+    If !fstat Then
+      Commit
+    Else
+      Rollback
+    Endif
+
+    RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 1)
+  Endif
+  YRESPONSE = func YJSONSERIALIZE.GET_JSON(RESPONSE)
+
+End
+
+#########################################################################################
+
+Subprog YCHECK_ACCESS_TOKEN(YACCESSTOKEN, YRESPONSE)
+  Value Clbfile YACCESSTOKEN
+  Variable Clbfile YRESPONSE
+
+  Gosub GET_CONSTANTS From YUTILS
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Local Clbfile ACCESSTOKEN_QUERY_CLB(2)
+  Case GTYPDBA
+    When 1 : # Oracle
+      ACCESSTOKEN_QUERY_CLB = "select USERNAME_0, ATEXPIRACY_0 from YAX3MUSERTOK where DBMS_LOB.INSTR(ACCESSTOKEN_0, '" + YACCESSTOKEN + "') > 0 and AT_VALID_0 = " + num$(TRUE)
+    When 2 : # Sql
+      ACCESSTOKEN_QUERY_CLB = "select USERNAME_0, ATEXPIRACY_0 from YAX3MUSERTOK where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "' and AT_VALID_0 = " + num$(TRUE)
+  Endcase
+
+  Local Char ACCESSTOKEN_QUERY(250)(3)
+  Call YCLB2STRARR(ACCESSTOKEN_QUERY_CLB, ACCESSTOKEN_QUERY) From YUTILS
+
+  Local Tinyint IS_INVALIDTOKEN, IS_EXPIREDTOKEN
+
+  For (Char YCURR_USERNAME, Datetime YCURR_ATEXPIRACY) From num$(GTYPDBA*2+1) Sql ACCESSTOKEN_QUERY As [YAX3A]
+    # con questo controllo che non ci sia più o non sia più valido l'access token
+    IS_INVALIDTOKEN = func YUTILS.IIF(YCURR_USERNAME = AVOID.ACHAR, 2, 1)
+    IS_EXPIREDTOKEN = func YUTILS.IIF((YCURR_ATEXPIRACY < datetime$), 2, 1)
+  Next
+
+  Clbfile RESPONSE(0)
+  If IS_INVALIDTOKEN = TRUE
+    RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", UNAUTHORIZED, 0)
+    RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Token di accesso non valido o revocato!", 1)
+  Elsif IS_EXPIREDTOKEN = TRUE
+    RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", UNAUTHORIZED, 0)
+    RESPONSE += func YJSONSERIALIZE.GET_STR("message", "Token di accesso scaduto!", 1)
+  Else
+    RESPONSE = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 1)
+  Endif
+
+  YRESPONSE = func YJSONSERIALIZE.GET_JSON(RESPONSE)
+
+End
+
+#########################################################################################
+
+Subprog YINS_TOKEN(YUSERNAME, YACCESSTOKEN, YACCESSTOKEN_EXPIRACY, YAT_VALID, YREFRESHTOKEN, YREFRESHTOKEN_EXPIRACY, YRT_VALID, YRESPONSE)
+  Value Char YUSERNAME
+  Value Clbfile YACCESSTOKEN
+  Value Char YACCESSTOKEN_EXPIRACY
+  Value Integer YAT_VALID
+  Value Clbfile YREFRESHTOKEN
+  Value Char YREFRESHTOKEN_EXPIRACY
+  Value Integer YRT_VALID
+  Variable Clbfile YRESPONSE
+
+  Local File YAX3MUSERTOK [YAX3MUT]
+
+  Trbegin [YAX3MUT]
+
+  [F:YAX3MUT]USERNAME = YUSERNAME
+  [F:YAX3MUT]ACCESSTOKEN = YACCESSTOKEN
+  [F:YAX3MUT]ATEXPIRACY = gdatetime$(YACCESSTOKEN_EXPIRACY)
+  [F:YAX3MUT]AT_VALID = YAT_VALID
+  [F:YAX3MUT]REFRESHTOKEN = YREFRESHTOKEN
+  [F:YAX3MUT]RTEXPIRACY = gdatetime$(YREFRESHTOKEN_EXPIRACY)
+  [F:YAX3MUT]RT_VALID = YRT_VALID
+  [F:YAX3MUT]CREUSR = "AX3A"
+  [F:YAX3MUT]UPDUSR = "AX3A"
+
+  Write [YAX3MUT]
+
+  If !fstat
+    Commit
+  Else
+    Rollback
+  Endif
+
+  Gosub JSON_RESPONSE_BUILDER From YUTILS
+
+End
+
+#########################################################################################
+
+Subprog YINV_TOKEN(YACCESSTOKEN, YRESPONSE)
+  Value Clbfile YACCESSTOKEN
+  Variable Clbfile YRESPONSE
+
+  Gosub GET_CONSTANTS From YUTILS
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  Local Clbfile ACCESSTOKEN_QUERY_CLB(0), TOKEN_QUERY_CLB(0)
+  Local Char ACCESSTOKEN_QUERY(250)(3), TOKEN_QUERY(250)(3)
+
+  Case GTYPDBA
+    When 1 : # Oracle
+      TOKEN_QUERY_CLB = "update YAX3MUSERTOK set AT_VALID_0 = 1, RT_VALID_0 = 1, UPDDATTIM_0 = SYS_EXTRACT_UTC(SYSTIMESTAMP) where DBMS_LOB.INSTR(ACCESSTOKEN_0, '" + YACCESSTOKEN + "') > 0"
+      Setlob ACCESSTOKEN_QUERY_CLB With "select count(*) from YAX3MUSERTOK where DBMS_LOB.INSTR(ACCESSTOKEN_0, '" + YACCESSTOKEN + "') > 0 and AT_VALID_0 = " + num$(TRUE)
+    When 2 : # Sql
+      TOKEN_QUERY_CLB = "update YAX3MUSERTOK set AT_VALID_0 = 1, RT_VALID_0 = 1, UPDDATTIM_0 = GETUTCDATE() where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "'"
+      Setlob ACCESSTOKEN_QUERY_CLB With "select count(*) from YAX3MUSERTOK where ACCESSTOKEN_0 = '" + YACCESSTOKEN + "' and AT_VALID_0 = " + num$(TRUE)
+  Endcase
+
+  Call YCLB2STRARR(ACCESSTOKEN_QUERY_CLB, ACCESSTOKEN_QUERY) From YUTILS
+
+  Local Tinyint IS_INVALIDTOKEN
+  Local File YAX3MUSERTOK [YAX3MUT]
+
+  For (Integer YCOUNT_USERTOK) From num$(GTYPDBA*2+1) Sql ACCESSTOKEN_QUERY As [YAX3A]
+    If YCOUNT_USERTOK > 0
+
+      Call YCLB2STRARR(TOKEN_QUERY_CLB, TOKEN_QUERY) From YUTILS
+
+      Trbegin [YAX3MUT]
+      Execsql From num$(GTYPDBA*2+1) Sql TOKEN_QUERY
+
+      If !fstat Then
+        Commit
+      Else
+        Rollback
+      Endif
+    Else
+      fstat = 0 #lo setto uguale a 0 perchè se il token non esiste è già stato invalidato e restituisco success
+    Endif
+  Next
+
+  Gosub JSON_RESPONSE_BUILDER From YUTILS
+
+End

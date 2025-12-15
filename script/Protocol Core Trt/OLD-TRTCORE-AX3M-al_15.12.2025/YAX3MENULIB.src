@@ -1,0 +1,168 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+################################################################################
+# Subprog: YGET_MENU_FOR_USER
+# Input:
+#   - YUSERNAME (app username)  (Value Char)
+# Output:
+#   - YRESPONSE (clobfile) JSON compatibile con il formato di GetMenuItems()
+#
+# Logica:
+#   1) trova mappatura locale YAX3MUSER -> X3USERNAME (campo X3USERNAME / CODUSR)
+#   2) legge AUTILIS per CODUSR -> PRFFCT
+#   3) legge AFCTFCT per PRFCOD: se ALLFCT = 1 => tutte le funzioni abilitate
+#      altrimenti legge AFCTPRF per PRFCOD e costruisce lista FUNCTIONS[] con FNC
+#   4) confronta lista FUNCTIONS con la mappatura menu->FNC definita in questo subprog
+#   5) costruisce il JSON nel formato:
+#     {
+#       "YSMR": { "Controller": "...", "Title":"...", "SubItemsTitle": [ ... ] },
+#       "YSMO": { ... }
+#     }
+################################################################################
+
+Subprog YGETMENU(YUSERNAME, YRESPONSE)
+  Value Char YUSERNAME
+  Variable Clbfile YRESPONSE
+
+  Gosub GET_CONSTANTS From YUTILS
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  # local vars
+  Local Char X3USERNAME(5)
+  Local Char AX3M_ATABDIV(4) : AX3M_ATABDIV = func AFNC.PARAM("YTDMENAX3M", "")
+  Local Char FUNCTION_ARRAY(250)(2)
+  Local Char FUNCTION_ID(50)
+  Local Char YPRFCOD(5)
+  Local Integer FIRST_ITEM : FIRST_ITEM = 1
+
+  Local Clbfile FUNCTION_JSON_ARRAY(1)
+  Local Clbfile MENU_ITEMS(1)
+
+  Local File AUTILIS [AUS], YAX3MUSER [YAX3MU], ATABDIV [ADI], ATEXTRA [AXX], AFCTFCT [AFT], AFCTPRF [AFP]
+
+  YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+
+  If YUSERNAME = AVOID.ACHAR
+    Gosub GET_FULLRESPONSE #RIMUOVERE QUANDO ANTONIO HA IMPLEMENTATO LA PARTE DI FRONTEND
+  Else
+    Columns [YAX3MU] (X3USERNAME)
+    #Inizio elaborazione
+    Read [YAX3MU]YAX3MU0 = YUSERNAME
+
+    If fstat = 0
+
+      Columns [AUS] (PRFFCT)
+      Read [AUS]CODUSR = [F:YAX3MU]X3USERNAME
+
+      If fstat = 0
+
+        YPRFCOD = [AUS]PRFFCT
+        If vireblc(YPRFCOD, 2) <> AVOID.ACHAR
+
+          Columns [AFT] (ALLFCT)
+          Read [AFT]AFT0=YPRFCOD
+
+          If fstat = 0
+            If [AFT]ALLFCT = 2
+              Gosub GET_FULLRESPONSE
+            Else
+              Gosub GET_FILTEREDRESPONSE
+            Endif
+          Endif
+
+        Endif
+  #
+      Else
+#       #Utente non trovato su x3 (SBLOCCO TUTTE LE FUNZIONI FINCHE' NON C'è UN PROFILO)
+#       Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 404, 0)
+#       Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non presente in anagrafica X3!", 1)
+        Gosub GET_FULLRESPONSE
+      Endif
+    Else
+        # Utente non trovato su ax3m
+        Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 404, 0)
+        Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non presente in anagrafica ArgoX3 Mobile!", 1)
+    Endif
+  Endif
+
+  Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+  # --- scrittura su file come facevi prima ---
+#Local Char YFILENAME_RESP(100) : YFILENAME_RESP = "menu_payload_" + format$("YYYYMMDDhhmmss", datetime$)
+#Local Char YFILEPATH_RESP(250) : YFILEPATH_RESP = filpath("tmp", YFILENAME_RESP, "json")
+#Openo YFILEPATH_RESP Using [YRESP]
+#Iomode adxifs ";" Using [YRESP]
+#Iomode adxium GUTF8 Using [YRESP]
+#Iomode adxirs chr$(13)+chr$(10) Using [YRESP]
+#Wrseq YRESPONSE Using [YRESP]
+#Openo Using [YRESP]
+
+Call FERME_TRACE From LECFIC
+
+End
+
+################################################################################
+
+$GET_FILTEREDRESPONSE
+
+  Columns [ADI] (CODE, A1, ENAFLG)
+  Link [AFP] With  [AFT]AFT0 ~= [AFP]PRFCOD,
+&                  [ADI]CODE ~= AX3M_ATABDIV;[AFP]FNC
+&            As    [FCTLNK]
+&            Where ([AFP]PRFCOD = YPRFCOD & [ADI]ENAFLG = 2)
+&            Order By [ADI]N1
+
+  For [FCTLNK]
+    Gosub BUILD_MENUITEM
+  Next
+
+  Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 200, 0)
+  Append YRESPONSE, MENU_ITEMS
+
+Return
+
+################################################################################
+
+$GET_FULLRESPONSE
+
+  # Tabella diversa per reperire i controller da interrogare su ArgoX3 API
+  # Se la lettura fallisce non ho gestito i controller per l'api associata alle funzioni su mobile
+  #Readlock [AXX]AXX0='ATABDIV';'LNGDES';GLANGUE;AX3M_ATABDIV_CONTROLLERS;[AFC]CODINT
+
+  #prendo le funzioni associate al N°TabellaController, Attive(ENAFLG = 2)
+  # e ordinate secondo N1 (ordinamento da avere nel MenuController)
+
+  Columns [ADI] (CODE, A1, ENAFLG)
+  Filter [ADI] Where ([ADI]NUMTAB = val(AX3M_ATABDIV) & [ADI]ENAFLG = 2) Order By N1
+  For [ADI]
+    Gosub BUILD_MENUITEM
+  Next
+
+  Filter [ADI]
+
+  # Costruiamo la risposta finale
+  Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 200, 0)
+  Append YRESPONSE, MENU_ITEMS
+
+Return
+
+################################################################################
+
+$BUILD_MENUITEM
+
+  If FIRST_ITEM = 0
+    Append MENU_ITEMS, func YJSONSERIALIZE.GET_SEPARATOR()
+  Else
+    FIRST_ITEM = 0
+  Endif
+
+  # Creiamo l'array per questa funzione [descrizione, identificativo]
+  FUNCTION_ID = [ADI]CODE  # Questo dovrebbe essere YSMR, YSMO, ecc.
+  Read [F:AXX]AXX0 = "ATABDIV";"LNGDES";"ITA";AX3M_ATABDIV;FUNCTION_ID
+  If fstat = 0
+    FUNCTION_ARRAY(0) = [F:AXX]TEXTE    #descrizione
+    FUNCTION_ARRAY(1) = [ADI]A1         #controller
+    FUNCTION_JSON_ARRAY = func YJSONSERIALIZE.GET_STRLST(FUNCTION_ID, FUNCTION_ARRAY, 1)
+    Append MENU_ITEMS, FUNCTION_JSON_ARRAY
+  Endif
+
+Return

@@ -1,0 +1,175 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#**
+#* Create User Operation (Single or Bulk)
+#* Phases:
+#* 1) Start transaction
+#* 2) Loop through user data
+#* 3) Generate password, call REST service, write to table
+#* 4) Commit or Rollback transaction
+#* @param YUSERDATA Data matrix for users
+#* @param YMESSAGE Status message
+#* @param YSUCCESS Success flag
+#* @param YRESPONSEDATA Response data
+#*!
+
+Subprog YCREATEUPDATE_USER(YUSERDATA, YSUCCESS, YMESSAGE)
+
+  Variable Char YUSERDATA()(,)
+  Variable Integer YSUCCESS
+  Variable Char YMESSAGE
+
+  Local File YAX3MUSER [F:YAX3MU]
+  Local Integer YI
+  Local Char YPASSWORD(50)
+  Local Char YKEYVALUES(250)(2,3)
+  Local Char YCREDENTIALS(250)(2)
+  Local Char PCOD(100)(1), PVAL(100)(1)
+  Local Char YRESPONSE_ARR(250)(func YJSONDESERIALIZE.F_MAXELEMENT(), func YJSONDESERIALIZE.F_DEEPLEVEL() + 1)
+  Local Clbfile YRESPONSE_JSON(1), YBODY(1)
+  Local Integer EXIST_USER : EXIST_USER = 0
+  Local Char YDOSSIER(6): YDOSSIER = toupper(nomap(0))
+
+  Call OUVRE_TRACE ("YAX3MUSR - Creazione/Aggiornamento Utente ArgoX3 Mobile -" - num$(date$)) From LECFIC
+
+  Trbegin [F:YAX3MU]
+  For YI = 0 To func YUTILS.COUNT_MULTI(YUSERDATA) - 1
+
+    Readlock [F:YAX3MU]YAX3MU0 = YUSERDATA(YI, 1)
+    EXIST_USER = func YUTILS.IIF(fstat = 0, 1, 0)
+    # Insert record into table
+    [F:YAX3MU]X3USERNAME   = YUSERDATA(YI, 0)
+    [F:YAX3MU]USERNAME     = YUSERDATA(YI, 1)
+    [F:YAX3MU]NOMUSR       = YUSERDATA(YI, 3)
+    [F:YAX3MU]EMAIL        = YUSERDATA(YI, 4)
+    [F:YAX3MU]ENAFLG       = val(YUSERDATA(YI, 5))
+
+    YBODY+=func YJSONSERIALIZE.GET_STR("username", YUSERDATA(YI, 1), 0)
+    YBODY+=func YJSONSERIALIZE.GET_STR("password", YUSERDATA(YI, 2), 1)
+    YBODY=func YJSONSERIALIZE.GET_JSON(YBODY)
+
+    Call EXEC_NOTRACE("AX3M_API_" + YDOSSIER, "POST", "api", "/Auth/GetCredentials/", PCOD, PVAL, YBODY, YRESPONSE_JSON) From YRESTWS
+    #Call EXEC_NOTRACE("AX3M_API_Prod", "POST", "api", "/Auth/GetCredentials/", PCOD, PVAL, YBODY, YRESPONSE_JSON) From YRESTWS  #OLD
+
+    Call JSONPARSE(YRESPONSE_JSON, YRESPONSE_ARR) From YJSONDESERIALIZE
+
+    If YRESPONSE_ARR(0, 1) = "true"
+      [F:YAX3MU]PASSWORDHASH = YRESPONSE_ARR(2, 1)
+      [F:YAX3MU]PASSWORDSALT = YRESPONSE_ARR(3, 1)
+    Else
+      fstat = 1
+      Break
+    Endif
+
+    #non esiste l'utente
+    If EXIST_USER <> 1 & YSUCCESS = 1
+      Write [F:YAX3MU]
+    Else
+      Rewrite [F:YAX3MU]
+    Endif
+    If fstat
+      Break
+    Endif
+
+    Raz YBODY, [F:YAX3MU]
+
+  Next
+
+  If fstat = 0
+    Commit
+    If fstat = 0
+      YSUCCESS = 1
+    Else
+      Rollback
+      YSUCCESS = 0
+      YMESSAGE = "Errore interno!"
+    Endif
+  Else
+    Rollback
+    YSUCCESS = 0
+    YMESSAGE = "Errore interno!"
+  Endif
+
+End
+
+########################################################################################################
+
+#**
+#* Reset User Password (Single User)
+#* @param YUSERDATA Single user data matrix
+#* @param YMESSAGE Status message
+#* @param YSUCCESS Success flag
+#* @param YRESPONSEDATA Response data
+#**
+#* Update User Operation (Single or Bulk)
+#* Phases:
+#* 1) Start transaction
+#* 2) Loop through user data
+#* 3) Update records
+#* 4) Commit or Rollback transaction
+#* @param YUSERDATA Data matrix for users
+#* @param YMESSAGE Status message
+#* @param YSUCCESS Success flag
+#* @param YRESPONSEDATA Response data
+#*!
+
+Subprog YRESET_USERPWD(YUSERNAME, YPASSWORD, YSUCCESS, YMESSAGE)
+  Variable Char YUSERNAME
+  Variable Char YPASSWORD
+  Variable Integer YSUCCESS
+  Variable Char YMESSAGE
+
+  Local Integer EXIST_USER
+  Local Char PCOD(100)(1), PVAL(100)(1)
+  Local Char YRESPONSE_ARR(250)(func YJSONDESERIALIZE.F_MAXELEMENT(), func YJSONDESERIALIZE.F_DEEPLEVEL() + 1)
+  Local Clbfile YRESPONSE_JSON(1), YBODY(1)
+  Local Char YDOSSIER(6): YDOSSIER = toupper(nomap(0))
+
+  Local File YAX3MUSER [F:YAX3MU]
+
+  Readlock [F:YAX3MU]YAX3MU0 = YUSERNAME
+  EXIST_USER = func YUTILS.IIF(fstat = 0, 1, 0)
+
+  If EXIST_USER = 1
+
+    YBODY+=func YJSONSERIALIZE.GET_STR("username", YUSERNAME, 0)
+    YBODY+=func YJSONSERIALIZE.GET_STR("password", YPASSWORD, 1)
+    YBODY=func YJSONSERIALIZE.GET_JSON(YBODY)
+
+    Call EXEC("AX3M_API_" + YDOSSIER, "POST", "api", "/Auth/GetCredentials/", PCOD, PVAL, YBODY, YRESPONSE_JSON) From YRESTWS
+    #Call EXEC("AX3M_API_Prod", "POST", "api", "/Auth/GetCredentials/", PCOD, PVAL, YBODY, YRESPONSE_JSON) From YRESTWS  #OLD
+    Call JSONPARSE(YRESPONSE_JSON, YRESPONSE_ARR) From YJSONDESERIALIZE
+    #success = true
+    If YRESPONSE_ARR(0, 1) = "true"
+      [F:YAX3MU]PASSWORDHASH = YRESPONSE_ARR(2, 1)
+      [F:YAX3MU]PASSWORDSALT = YRESPONSE_ARR(3, 1)
+    Else
+      fstat = 1
+      YSUCCESS = 0
+      YMESSAGE = "Errore interno!"
+    Endif
+    Trbegin [F:YAX3MU]
+    #non esiste l'utente
+    If EXIST_USER <> 1 & YSUCCESS = 1
+      Write [F:YAX3MU]
+    Else
+      Rewrite [F:YAX3MU]
+    Endif
+    If fstat
+      YSUCCESS = 0
+      YMESSAGE = "Errore interno!"
+    Endif
+
+    If fstat = 0
+      Commit
+    Else
+      Rollback
+      YSUCCESS = 0
+      YMESSAGE = "Errore interno!"
+    Endif
+
+  Else
+    YSUCCESS = 0
+    YMESSAGE = "L'utente non è attivo su ArgoX3 Mobile, procedere prima alla creazione!"
+  Endif
+
+End
