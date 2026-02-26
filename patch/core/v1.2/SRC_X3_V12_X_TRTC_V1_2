@@ -2730,6 +2730,7 @@ Return
 
 ####################################################################################################################
 #**
+#* @private
 #* Subprog per setting Oggetto-Campo nella matrice YFIELDS
 #*
 #* @param YFIELDS Matrice dei campi
@@ -2896,6 +2897,7 @@ End
 
 #############################################################################################################
 #**
+#* @private
 #* Ricerca Indice del primo campo visualizzato paretndo da quello corrente
 #*
 #* @param YFIELDS  Matrice dei campi
@@ -4037,57 +4039,6 @@ $YAX3MOB_SETFIELD_RIQUADRO_MODIF
   Endif
 Return
 
-#############################################################################################################
-#**
-#* Funzione per azzerare/pulire il riquadro Lato X3/lato Mobile
-#*
-#* @param YFIELDS Matrice dei campi di videata
-#* @param YMSKALIAS  Alias videata
-#*
-#*!
-
-Subprog YAX3MOB_RAZRIQUADRO(YFIELDS,YMSKALIAS)
-
-  Variable Char YFIELDS()(,)
-  Value Char YMSKALIAS
-
-  Local File AMSKZON [F:YAMZ]
-  Local Integer YI,YJ,YK
-  Local Char YDETTFLDCODES(250)(50)
-  Local Char YDFLDCODE(250)
-  Local Char YTMPFIELDS(250)(dim(YFIELDS,1),dim(YFIELDS,2))
-
-  If(GWEBSERV)
-
-    For YI =0 To func YUTILS.COUNT_MULTI(YFIELDS) - 1
-      #campo riquadro
-      If(YFIELDS(YI,8) = "1")
-
-        YDFLDCODE = YFIELDS(YI,0)
-        If(find(YDFLDCODE, YDETTFLDCODES) = 0)
-          YDETTFLDCODES(YK) = YDFLDCODE
-          YK += 1
-        Else
-          #razzo tutta la riga matrice : YI (codice campo compreso)
-          For YJ=0 To dim(YFIELDS,2)-1
-            Raz YFIELDS(YI,YJ)
-          Next
-        Endif
-      Endif
-    Next
-    Call YHANDLEMAT(YFIELDS, YTMPFIELDS) From YUTILS  #qui tolgo le righe vuote , riconfiguro la matrice
-  Else
-    #imposto  a 0(esempio: NBLIG = 0)
-    Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKALIAS & [F:YAMZ]DIME = 0)
-    Read [F:YAMZ] First
-    YNBLIGCODE = [F:YAMZ]CODZON # assumiamo un solo riquadro per videata
-
-    Default Mask "[M:"+YMSKALIAS+"]"
-    Assign "[M]"+YNBLIGCODE With 0
-    Affzo = "[M:"+YMSKALIAS+"]"+YNBLIGCODE
-  Endif
-End
-
 
 ##########################################################################################################
 #                                     GESTIONE BOTTONE DI FINESTRA
@@ -4285,6 +4236,58 @@ Subprog YAX3MOB_RAZMESSAGES(YFIELDS)
     For YI =0 To dim(YFIELDS,1)-1
       YFIELDS(YI, YCOL_MEX) = AVOID.ACHAR  #mex/label
     Next
+  Endif
+End
+
+
+#############################################################################################################
+#**
+#* Funzione per azzerare/pulire il riquadro Lato X3/lato Mobile
+#*
+#* @param YFIELDS Matrice dei campi di videata
+#* @param YMSKALIAS  Alias videata
+#*
+#*!
+
+Subprog YAX3MOB_RAZRIQUADRO(YFIELDS,YMSKALIAS)
+
+  Variable Char YFIELDS()(,)
+  Value Char YMSKALIAS
+
+  Local File AMSKZON [F:YAMZ]
+  Local Integer YI,YJ,YK
+  Local Char YDETTFLDCODES(250)(50)
+  Local Char YDFLDCODE(250)
+  Local Char YTMPFIELDS(250)(dim(YFIELDS,1),dim(YFIELDS,2))
+
+  If(GWEBSERV)
+
+    For YI =0 To func YUTILS.COUNT_MULTI(YFIELDS) - 1
+      #campo riquadro
+      If(YFIELDS(YI,8) = "1")
+
+        YDFLDCODE = YFIELDS(YI,0)
+        If(find(YDFLDCODE, YDETTFLDCODES) = 0)
+          YDETTFLDCODES(YK) = YDFLDCODE
+          YK += 1
+        Else
+          #razzo tutta la riga matrice : YI (codice campo compreso)
+          For YJ=0 To dim(YFIELDS,2)-1
+            Raz YFIELDS(YI,YJ)
+          Next
+        Endif
+      Endif
+    Next
+    Call YHANDLEMAT(YFIELDS, YTMPFIELDS) From YUTILS  #qui tolgo le righe vuote , riconfiguro la matrice
+  Else
+    #imposto  a 0(esempio: NBLIG = 0)
+    Filter [F:YAMZ] Where ([F:YAMZ]CODMSK = YMSKALIAS & [F:YAMZ]DIME = 0)
+    Read [F:YAMZ] First
+    YNBLIGCODE = [F:YAMZ]CODZON # assumiamo un solo riquadro per videata
+
+    Default Mask "[M:"+YMSKALIAS+"]"
+    Assign "[M]"+YNBLIGCODE With 0
+    Affzo = "[M:"+YMSKALIAS+"]"+YNBLIGCODE
   Endif
 End
 
@@ -4755,6 +4758,7 @@ Return
 ##################################################################################################################
 
 #**
+#* @private
 #* Metodo per estrarre codice Sottoprogramma (X3) dato codice Azione in anagrafica
 #*
 #* @param YACTION Codice azione
@@ -4776,6 +4780,7 @@ End YSUBPRGNAME
 
 ######################################################################################
 #**
+#* @private
 #* Metodo per determinare la dimensione di un Parametro di un Sottoprogramma di X3
 #*
 #* @param YSUBPRGNAME Codice del Sottoprogramma di X3
