@@ -1,0 +1,612 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+##########################################################################################################################
+#                                          GESTIONE DEGLI ALERT AGGIUNTIVI
+##########################################################################################################################
+#CANC
+
+Subprog YAX3MOB_ADDYES(Y_YESLST,YYWS)
+
+  Variable Char Y_YESLST()()
+  Value Char YYWS
+
+  Local Integer YI,YN : YN = func YUTILS.COUNT(Y_YESLST)
+  YI =YN
+  Y_YESLST(YI)= YYWS
+End
+
+##################################################################################################
+#CANC
+
+Subprog YAX3MOB_ADDNO(Y_NOLST,YNWS)
+
+  Variable Char Y_NOLST()()
+  Value Char YNWS
+
+  Local Integer YI,YN : YN = func YUTILS.COUNT(Y_NOLST)
+  YI = YN
+  Y_NOLST(YI)= YNWS
+
+End
+##################################################################################################
+#QUESTION BOX (X3/MOBILE)
+
+Subprog YAX3MOB_QUESTION(ALERT_TYPE,QUESTION_MESSAGE, ALERT_WS,YEXEC_AFTER_SERVICE,YYES_ACTLIST,YNO_ACTLIST)
+
+  Variable Char ALERT_TYPE
+  Value Char QUESTION_MESSAGE
+  Variable Char ALERT_WS()(,)
+  Value Char YEXEC_AFTER_SERVICE
+  Value Char YYES_ACTLIST()()
+  Value Char YNO_ACTLIST()()
+
+  Local Char YEXEC_AFTER(20): YEXEC_AFTER = "executeAfterAlert"
+  Local Char YMODE_ACTION(20): YMODE_ACTION = toupper(YEXEC_AFTER)
+
+  If(!GWEBSERV)#X3
+    Local Integer YN: YN = 2
+    Call OUINON(QUESTION_MESSAGE, YN) From GESECRAN
+    Gosub EXECUTE_AFTER_ALERT From GFONCTION
+  Else
+    Local Integer YI
+    ALERT_TYPE= "confirm"
+    Call YAX3MOB_SET_ALERTWS(ALERT_WS,YEXEC_AFTER,YEXEC_AFTER_SERVICE,ALERT_TYPE,0,AVOID.ACHAR,AVOID.ACHAR,2)
+
+#Call YAX3MOB_PRINT_MATRIX("0-ALERT_WS", ALERT_WS) From YEXE
+
+#    #Azioni per YES
+#    For YI = 0 To func YUTILS.COUNT(YYES_ACTLIST)-1
+#      Call YAX3MOB_SET_ALERTWS(ALERT_WS,"action",YYES_ACTLIST(YI),YEXEC_AFTER,2,AVOID.ACHAR,AVOID.ACHAR,0)
+#    Next
+#
+#    #Azioni per NO
+#    For YI = 0 To func YUTILS.COUNT(YNO_ACTLIST)-1
+#      Call YAX3MOB_SET_ALERTWS(ALERT_WS,"action",YNO_ACTLIST(YI),YEXEC_AFTER,1,AVOID.ACHAR,AVOID.ACHAR,0)
+#    Next
+  Endif
+End
+
+###############################################################################################################
+
+$YAX3MOB_INIT_ACTIONS_HANDLERS
+
+  Local Clbfile YAX3MRESP(14),YRESPONSE(14)
+  Default Mask [M]
+Return
+
+###############################################################################################################
+Subprog YAX3MOB_SHOWALERT_WITHACTIONS(YMKSTAT,ALERT_TYPE,ALERT_MESSAGE,ALERT_WS,SERVICE_ACTION)
+
+  Value Integer YMKSTAT
+  Variable Char ALERT_TYPE
+  Variable Char ALERT_MESSAGE
+  Variable Char ALERT_WS()(,)
+  Value Char SERVICE_ACTION
+
+  If(!GWEBSERV)#X3
+    Case YMKSTAT
+      When 0  #ok
+        Call MESSAGE(ALERT_MESSAGE) From GESECRAN
+      When 1  #warning
+        Local Integer OKCAN : OKCAN = 2
+        Call AVERTIR(ALERT_MESSAGE, OKCAN) From GESECRAN
+      When 2  #errore
+        Call ERREUR(ALERT_MESSAGE) From GESECRAN
+      When Default
+    Endcase
+  Else #Mobile
+    Case YMKSTAT
+      When 0  #ok
+        ALERT_TYPE = "toast"
+      When 1  #warning/info
+        ALERT_TYPE = "info"
+      When 2  #errore
+        ALERT_TYPE = "error"
+      When Default
+    Endcase
+  Endif
+
+  #gestisco l'azione(associata al servizio)
+  If(vireblc(SERVICE_ACTION,2) <> AVOID.ACHAR)
+    If(!GWEBSERV)
+      #X3
+      #nel TRT, è presente: CASE SERVICE_ACTION ENDCASE
+      Gosub EXECUTE From GFONCTION
+    Else
+      #Mobile
+      Call YAX3MOB_SET_ALERTWS(ALERT_WS,"execute",SERVICE_ACTION,ALERT_TYPE,0,AVOID.ACHAR,AVOID.ACHAR,0)
+    Endif
+  Endif
+End
+
+#######################################################################################################################
+
+#**
+#* Gestore per popolare la matrice ALERT_WS
+#*
+#* @param YALERT_WS         Matrice con ws da chiamare
+#* @param YACTION_TYPE      Tipo di azione chiamata
+#* @param YSUBPRG_CODE      Codice subprog (associata al servizio da chiamare)
+#* @param YPARENT_ACTION    Azione chiamante
+#* @param YMODE             Modalità: 0 , 1(= No), 2=(Yes) #Legata a yes/no (1/2) o a niente(0)
+#* @param YDETAILSTYPE      Opzioni:destination, mode
+#* @param YDETAILSTYPEVAL   Opzioni:main_menu/close_app
+#* @param YNOYES_ENABLING   Prevista gestione yes (=2) /NO (=1)
+#*!
+
+Subprog YAX3MOB_SET_ALERTWS(YALERT_WS,YACTION_TYPE,YSUBPRG_CODE,YPARENT_ACTION,YMODE,YDETAILSTYPE,YDETAILSTYPEVAL,YNOYES_ENABLING)
+
+  Variable Char YALERT_WS()(,)
+  Value Char YACTION_TYPE
+  Value Char YSUBPRG_CODE
+  Value Char YPARENT_ACTION
+  Value Integer YMODE
+  Value Char YDETAILSTYPE
+  Value Char YDETAILSTYPEVAL
+  Value Integer YNOYES_ENABLING
+
+  Local Integer YNEWID: YNEWID = func YUTILS.COUNT_MULTI(YALERT_WS) #stacco nuovo ID
+  YALERT_WS(YNEWID,0) = num$(YNEWID)
+  YALERT_WS(YNEWID,1) = YACTION_TYPE
+  YALERT_WS(YNEWID,2) = YSUBPRG_CODE
+  YALERT_WS(YNEWID,3) = YPARENT_ACTION      #parent action
+  YALERT_WS(YNEWID,4) = num$(YMODE)         #ymode : 0 , 1(= No), 2=(Yes) #Legata a yes/no
+  YALERT_WS(YNEWID,5) = YDETAILSTYPE      #destination, mode
+  YALERT_WS(YNEWID,6) = YDETAILSTYPEVAL   #main_menu/close_app
+  YALERT_WS(YNEWID,7) = num$(YNOYES_ENABLING)   #yes_no-enabling: 1: non prevede la struttura Y/N; 2 : prevede la struttura Y/N
+
+End
+
+############################################################################################################################
+#**
+#* Costanti associate alle proprietà di un'action
+#*!
+
+$YALERTWSCONST
+
+  Local Char YACTIONSCONST(50)(9)#
+
+  Const Integer YALERTWS_ID:YALERTWS_ID=0
+  YACTIONSCONST(0)= "id"
+
+  Const Integer YALERTWS_ACTTYP:YALERTWS_ACTTYP =1
+  YACTIONSCONST(1)= "ActionType"
+
+  Const Integer YALERTWS_SUBCODE:YALERTWS_SUBCODE = 2
+  YACTIONSCONST(2)= "ActionSybprg"
+
+  Const Integer YALERTWS_PARENTACT:YALERTWS_PARENTACT =3
+  YACTIONSCONST(3)= "parentAction"
+
+  Const Integer YALERTWS_ACTMODE:YALERTWS_ACTMODE =4
+  YACTIONSCONST(4)= "AlertMode"
+
+  Const Integer YALERTWS_DETTYP:YALERTWS_DETTYP = 5
+  YACTIONSCONST(5)= "actionDetTyp"
+
+  Const Integer YALERTWS_DETTYPVAL:YALERTWS_DETTYPVAL =6
+  YACTIONSCONST(6)= "actionDetTypVal"
+
+  Const Integer YALERTWS_YN_ENA:YALERTWS_YN_ENA = 7
+  YACTIONSCONST(5)= "actionYesNoEnabled"
+
+Return
+
+####################################################################################################
+
+$YAX3MOB_TO_MAINMENU
+
+  If(GWEBSERV)#MOBILE
+    Gosub YCONST_ACTIONS
+    Call YAX3MOB_SET_ALERTWS(ALERT_WS,"navigation",AVOID.ACHAR,AVOID.ACHAR,0,"destination",YMAINMENU)
+  Else
+    #GESTIONI X3
+  Endif
+Return
+
+###########################################################################################################
+
+$YAX3MOB_CLOSEAPP
+  #SOLO GESTIONE MOBILE
+  If(GWEBSERV)#MOBILE
+    Gosub YCONST_ACTIONS
+    Call YAX3MOB_SET_ALERTWS(ALERT_WS,"navigation",AVOID.ACHAR,AVOID.ACHAR,0,"mode",YCLOSEAPP)
+  Endif
+Return
+
+############################################################################################################
+
+$YCONST_ACTIONS
+
+#  Const Char YMAINMENU: YMAINMENU = "MAIN_MENU"
+#  Const Char YCLOSEAPP: YCLOSEAPP = "CLOSE_APP"
+
+  Local Char YMAINMENU(10): YMAINMENU = "MAIN_MENU"
+  Local Char YCLOSEAPP(10): YCLOSEAPP = "CLOSE_APP"
+Return
+
+##############################################################################################################
+#**
+#* Gestore per inserire azioni al SI/NO
+#*
+#* @param ALERT_WS      Matrice
+#* @param ALERT_TYPE    Tipo di Alert
+#* @param SERVICE       Eventuale servizio da richiamare
+#* @param YMODE  da associare a SI (=2), al NO: (=1)
+#*!
+
+Subprog YAX3MOB_YESNOACTION_ADD(ALERT_WS,ALERT_TYPE,SERVICE,YMODE,YYESLIST,YNOLIST)
+
+  Variable Char ALERT_WS()(,)
+  Value Char ALERT_TYPE
+  Value Char SERVICE
+  Value Integer YMODE
+  Variable Char YYESLIST()()
+  Variable Char YNOLIST()()
+
+  Local Char YDETAILTYPE(20)
+  Local Char YDETAILTYPEVAL(20)
+  Local Char YALERT(20)
+
+  Gosub YCONST_ACTIONS
+
+  If(ALERT_TYPE = "MAINMENU")
+    YALERT ="navigation"
+    YDETAIL_TYPE="destination"
+    YDETAILTYPEVAL=YMAINMENU
+  Endif
+
+  If(ALERT_TYPE = "CLOSEAPP")
+     YALERT ="navigation"
+     YDETAIL_TYPE="mode"
+     YDETAILTYPEVAL=YCLOSEAPP
+  Endif
+
+  If(YMODE =2)
+    Local Integer YI,YN : YN = func YUTILS.COUNT(YYESLIST)
+    If(tolower(ALERT_TYPE)="action")
+      YYESLIST(YN) = SERVICE
+    Else
+      YYESLIST(YN) = ALERT_TYPE
+    Endif
+  Else
+    Local Integer YI,YN : YN = func YUTILS.COUNT(YNOLIST)
+    If(tolower(ALERT_TYPE)="action")
+      YNOLIST(YN) = SERVICE
+    Else
+      YNOLIST(YN) = ALERT_TYPE
+    Endif
+  Endif
+
+  Call YAX3MOB_SET_ALERTWS(ALERT_WS,YALERT,SERVICE,"executeAfterAlert",YMODE,YDETAIL_TYPE,YDETAILTYPEVAL,1)
+End
+
+#################################################################################################################
+
+Subprog YHANDLE_ALERT_ACTION_SEC (ALERT_TYPE,ALERT_MESSAGE,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+  Value Char ALERT_TYPE
+  Value Char ALERT_MESSAGE
+  Variable Char ACTION_ITEMS()()
+  Variable Integer ACTION_INDEX
+  Value Char ALERT_WS()(,)
+
+  Local Integer YI
+  Local Char CHILD_ACTION(20)
+
+  Gosub YALERTWSCONST   #COSTANTI
+  YI = func YUTILS.FIND_ITEM_INCOLUMN(ALERT_WS,ALERT_TYPE,YALERTWS_PARENTACT)
+
+  #GESTIRE CASO più azioni-figlie?
+  If(YI>-1)
+    CHILD_ACTION = vireblc(ALERT_WS(YI,YALERTWS_ACTTYP),2)
+    If(CHILD_ACTION <> AVOID.ACHAR)
+      Call ECR_TRACE("Azione secondaria associata :"- CHILD_ACTION,0)From GESECRAN
+      #Gosub YHANDLE_SECONDARY_ACTIONS
+      Call YHANDLE_SEC_ACTIONS(CHILD_ACTION,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+    Else
+      Call ECR_TRACE("L'azione"-ALERT_TYPE-"non prevede  alcuna azione secondaria dipendente",0)From GESECRAN
+    Endif
+  Else
+    Call ECR_TRACE("L'azione"-ALERT_TYPE-"non trovata nella matrice ALERT_WS, nella col ="-num$(YALERTWS_PARENTACT),0)From GESECRAN
+  Endif
+End
+
+###############################################################################################################################
+#GESTIONE AZIONI SECONDARIE
+
+Subprog YHANDLE_SEC_ACTIONS(CHILD_ACTION,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+  Value Char CHILD_ACTION
+  Variable Char ACTION_ITEMS()()
+  Variable Integer ACTION_INDEX
+  Value Char ALERT_WS()(,)
+
+  Case tolower(CHILD_ACTION)
+    When "executeafteralert"
+      Call YHANDLE_ALERT_ACTION_EXECAFTER (CHILD_ACTION,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+    When "execute"
+      Call YHANDLE_ALERT_EXECUTE(CHILD_ACTION,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+    When "navigation"
+      Call YHANDLE_ALERT_NAV(CHILD_ACTION,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+    When "action"
+      Call YHANDLE_ALERT_GENERIC(CHILD_ACTION,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+    When Default
+  Endcase
+End
+
+##################################################################################################################################
+#EXEC_AFTER
+
+Subprog YHANDLE_ALERT_ACTION_EXECAFTER (CHILD_ACTION,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+  Value Char CHILD_ACTION
+  Variable Char ACTION_ITEMS()()
+  Variable Integer ACTION_INDEX
+  Value Char ALERT_WS()(,)
+
+  Local Integer YI
+  Local Char YALERT_SERVICE(10),YYESPART(200)(5),YNOPART(200)(5)
+  Local Char YALERT_TYPE(20): YALERT_TYPE = CHILD_ACTION
+  Local Char ALERT_DETAILS(250)(3)
+
+  Gosub YALERTWSCONST
+
+  ACTION_INDEX+=1
+  YI = func YUTILS.FIND_ITEM_INCOLUMN(ALERT_WS,YALERT_TYPE,YALERTWS_ACTTYP)
+  YALERT_SERVICE = ALERT_WS(YI,2) #valorizzo yalert_service
+
+  #subprog
+  ALERT_DETAILS(0) = func YJSONSERIALIZE.GET_STR("subprog", YALERT_SERVICE, 1)
+
+  #controllo che abbia abilitata la modalità YES/NO
+  If(val(ALERT_WS(YI,YALERTWS_YN_ENA))=2)
+
+#Infbox "alert_type ="-YALERT_TYPE
+    Call YGET_YESNO_ACTIONSLIST(YYESPART,YNOPART,YALERT_TYPE,ALERT_WS)
+
+    #onYesActions
+    ALERT_DETAILS(1) = func YJSONSERIALIZE.GET_STRARRAY_FROM_STRARRAY("onYesActions", YYESPART, 1)
+#Infbox "ALERT_DETAILS(1):"-ALERT_DETAILS(1)
+
+    #onNoActions
+    ALERT_DETAILS(2) = func YJSONSERIALIZE.GET_STRARRAY_FROM_STRARRAY("onNoActions", YNOPART, 1)
+#Infbox "ALERT_DETAILS(2):"-ALERT_DETAILS(2)
+  Endif
+
+  Local Char ALERT_DETAILS_TEXT(250)
+  Local Char ALERT_TOAST_ITEM(250)(2)
+  ALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+#Infbox"AL_DET_TEXT:"-ALERT_DETAILS_TEXT
+
+  ALERT_TOAST_ITEM(0) = func YJSONSERIALIZE.GET_STR("type",CHILD_ACTION, 1)
+  ALERT_TOAST_ITEM(1) = ALERT_DETAILS_TEXT
+  ALERT_TOAST_TEXT = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, ALERT_TOAST_ITEM, 1, 1)
+  ACTION_ITEMS(ACTION_INDEX) = ALERT_TOAST_TEXT
+
+#Infbox "EXEC_AFT:"-ACTION_ITEMS(ACTION_INDEX)
+
+End
+##############################################################################################################
+#**
+#* Compongo gli array YES_ACTIONS,NO_ACTIONS
+#*
+#* @param YYESPART
+#* @param YNOPART
+#* @param YALERT_TYPE
+#* @param ALERT_WS
+#*!
+
+Subprog YGET_YESNO_ACTIONSLIST(YYESPART,YNOPART,YALERT_TYPE,ALERT_WS)
+
+  Variable Char YYESPART()()
+  Variable Char YNOPART()()
+  Value Char YALERT_TYPE
+  Value Char ALERT_WS()(,)
+
+  Local Integer YI,YJ
+  Local Char YONYESLIST(50)(0..)
+  Local Char YONNOLIST(50)(0..)
+  Local Integer YYES_INDEX,YNO_INDEX: YYES_INDEX= -1:YNO_INDEX= -1
+  Local Char Y_YN_ACTION(15)
+
+  Gosub YALERTWSCONST
+
+  For YI =0 To func YUTILS.COUNT_MULTI(ALERT_WS)-1
+    #Prendo quelli che hanno parent_action = "executeAfterAlert"
+    If(vireblc(ALERT_WS(YI,YALERTWS_PARENTACT),2)= "executeAfterAlert")
+      If(val(ALERT_WS(YI,YALERTWS_ACTMODE)) = 2)
+        #YYES_INDEX +=1
+##Infbox "yes_mode_"+"yes_idx="+num$(YYES_INDEX)+ALERT_WS(YI,YALERTWS_ACTTYP)
+        #Call YHANDLE_SEC_ACTIONS(ALERT_WS(YI,YALERTWS_ACTTYP),YONYESLIST, YYES_INDEX,ALERT_WS)
+        #Call YHANDLE_SEC_ACTIONS(ALERT_WS(YI,YALERTWS_ACTTYP),YYESPART, YYES_INDEX,ALERT_WS)
+
+        #
+        Local Integer YD
+        Local Char YALERT_DETAILS_TEXT(250)
+        Local Char ALERT_DETAILS(250)(0..)
+        Local Char YALERT_SERVICE(10),YALERT_TYPE(20):YALERT_TYPE = ALERT_WS(YI,YALERTWS_ACTTYP)
+
+        YYES_INDEX +=1
+        #YI = func FIND_ITEM_INCOLUMN(ALERT_WS,YALERT_TYPE,1)
+        YALERT_SERVICE = vireblc(ALERT_WS(YI,2),2) #valorizzo yalert_service
+
+        If(vireblc(YALERT_SERVICE,2) <> AVOID.ACHAR)
+          ALERT_DETAILS(YD) = func YJSONSERIALIZE.GET_STR("subprog", YALERT_SERVICE, 1)
+          YD+=1
+        Endif
+
+        If(vireblc(ALERT_WS(YI,5),2) <> AVOID.ACHAR)
+          ALERT_DETAILS(YD) = func YJSONSERIALIZE.GET_STR(ALERT_WS(YI,5), ALERT_WS(YI,6), 1)
+        Endif
+
+        YALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+
+        Local Char ALERT_TOAST_ITEM(50)(2)
+        ALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+        ALERT_TOAST_ITEM(0) = func YJSONSERIALIZE.GET_STR("type",YALERT_TYPE, 1)
+        ALERT_TOAST_ITEM(1) = ALERT_DETAILS_TEXT
+        ALERT_TOAST_TEXT = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, ALERT_TOAST_ITEM, 1, 1)
+        YYESPART(YYES_INDEX) = ALERT_TOAST_TEXT
+      Else
+        #AZIONE - NO
+        #YNO_INDEX +=1
+        #Call YHANDLE_SEC_ACTIONS(ALERT_WS(YI,YALERTWS_ACTTYP),YONNOLIST, YNO_INDEX,ALERT_WS)
+        #Call YHANDLE_SEC_ACTIONS(ALERT_WS(YI,YALERTWS_ACTTYP),YNOPART, YNO_INDEX,ALERT_WS)
+
+        #
+        Local Char YALERT_DETAILS_TEXT(250)
+        Local Char ALERT_DETAILS(250)(0..)
+        Local Char YALERT_SERVICE(10),YALERT_TYPE(20):YALERT_TYPE = ALERT_WS(YI,YALERTWS_ACTTYP)
+
+        YNO_INDEX +=1
+        #YI = func FIND_ITEM_INCOLUMN(ALERT_WS,YALERT_TYPE,1)
+        YALERT_SERVICE = vireblc(ALERT_WS(YI,2),2) #valorizzo yalert_service
+
+        If(vireblc(YALERT_SERVICE,2) <> AVOID.ACHAR)
+          ALERT_DETAILS(0) = func YJSONSERIALIZE.GET_STR("subprog", YALERT_SERVICE, 1)
+        Endif
+        YALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+
+        Local Char ALERT_TOAST_ITEM(50)(2)
+        ALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+        ALERT_TOAST_ITEM(0) = func YJSONSERIALIZE.GET_STR("type",YALERT_TYPE, 1)
+        ALERT_TOAST_ITEM(1) = ALERT_DETAILS_TEXT
+        ALERT_TOAST_TEXT = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, ALERT_TOAST_ITEM, 1, 1)
+        YNOPART(YNO_INDEX) = ALERT_TOAST_TEXT
+      Endif
+    Endif
+  Next
+End
+
+###################################################################################################################
+#EXECUTE
+
+Subprog YHANDLE_ALERT_EXECUTE(YALERT_TYPE,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+  Value Char YALERT_TYPE
+  Variable Char ACTION_ITEMS
+  Variable Integer ACTION_INDEX
+  Value Char ALERT_WS()(,)
+
+  Local Char YALERT_DETAILS_TEXT(250)
+  Local Char ALERT_DETAILS(250)(0..)
+  Local Char YALERT_SERVICE(10)
+  Local Integer YI
+
+  ACTION_INDEX +=1
+  YI = func YUTILS.FIND_ITEM_INCOLUMN(ALERT_WS,YALERT_TYPE,1)
+  YALERT_SERVICE = vireblc(ALERT_WS(YI,2),2) #valorizzo yalert_service
+
+  If(YALERT_SERVICE <> AVOID.ACHAR)
+    ALERT_DETAILS(0) = func YJSONSERIALIZE.GET_STR("subprog", YALERT_SERVICE, 1)
+  Endif
+
+  YALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+
+  Local Char ALERT_TOAST_ITEM(100)(2)
+  ALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+  ALERT_TOAST_ITEM(0) = func YJSONSERIALIZE.GET_STR("type",CHILD_ACTION, 1)
+  ALERT_TOAST_ITEM(1) = ALERT_DETAILS_TEXT
+  ALERT_TOAST_TEXT = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, ALERT_TOAST_ITEM, 1, 1)
+  ACTION_ITEMS(ACTION_INDEX) = ALERT_TOAST_TEXT
+End
+
+###################################################################################################################
+
+#######################################################################################
+#generic action
+
+Subprog YHANDLE_ALERT_GENERIC(CHILD_ACTION,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+  Value Char CHILD_ACTION
+  Variable Char ACTION_ITEMS
+  Variable Integer ACTION_INDEX
+  Value Char ALERT_WS()(,)
+
+  Local Char YALERT_DETAILS_TEXT(250)
+  Local Char ALERT_DETAILS(250)(0..)
+  Local Char YALERT_SERVICE(10),YALERT_TYPE(20):YALERT_TYPE = CHILD_ACTION
+  Local Integer YI
+
+  ACTION_INDEX +=1
+  YI = func YUTILS.FIND_ITEM_INCOLUMN(ALERT_WS,YALERT_TYPE,1)
+  YALERT_SERVICE = vireblc(ALERT_WS(YI,2),2) #valorizzo yalert_service
+
+  If(vireblc(YALERT_SERVICE,2) <> AVOID.ACHAR)
+    ALERT_DETAILS(0) = func YJSONSERIALIZE.GET_STR("subprog", YALERT_SERVICE, 1)
+  Endif
+  YALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+
+  Local Char ALERT_TOAST_ITEM(50)(2)
+  ALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+  ALERT_TOAST_ITEM(0) = func YJSONSERIALIZE.GET_STR("type",CHILD_ACTION, 1)
+  ALERT_TOAST_ITEM(1) = ALERT_DETAILS_TEXT
+  ALERT_TOAST_TEXT = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, ALERT_TOAST_ITEM, 1, 1)
+  ACTION_ITEMS(ACTION_INDEX) = ALERT_TOAST_TEXT
+End
+
+#######################################################################################
+#NAVIGATION
+
+Subprog YHANDLE_ALERT_NAV(YALERT_TYPE,ACTION_ITEMS,ACTION_INDEX,ALERT_WS)
+
+  Value Char YALERT_TYPE
+  Variable Char ACTION_ITEMS
+  Variable Integer ACTION_INDEX
+  Value Char ALERT_WS()(,)
+
+  Local Char YALERT_DETAILS_TEXT(250)
+  Local Char ALERT_DETAILS(250)(0..)
+  Local Char YALERT_SERVICE(10),YALERT_NAVDETAIL_TYPE(20),YALERT_NAVDETAIL_VAL(20)
+  Local Integer YI
+
+  ACTION_INDEX +=1
+  YI = func YUTILS.FIND_ITEM_INCOLUMN(ALERT_WS,YALERT_TYPE,1)
+  YALERT_NAVDETAIL_TYPE = ALERT_WS(YI,5)   #es: detail_type: destination/mode
+  YALERT_NAVDETAIL_VAL = ALERT_WS(YI,6)    #es: main-menu, close_app
+  ALERT_DETAILS(0) = func YJSONSERIALIZE.GET_STR(YALERT_NAVDETAIL_TYPE, YALERT_NAVDETAIL_VAL, 1)
+  YALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+
+  Local Char ALERT_TOAST_ITEM(50)(2)
+  ALERT_DETAILS_TEXT = func YJSONSERIALIZE.GET_STROBJ("details", ALERT_DETAILS, 0, 1)
+  ALERT_TOAST_ITEM(0) = func YJSONSERIALIZE.GET_STR("type",CHILD_ACTION, 1)
+  ALERT_TOAST_ITEM(1) = ALERT_DETAILS_TEXT
+  ALERT_TOAST_TEXT = func YJSONSERIALIZE.GET_STROBJ(AVOID.ACHAR, ALERT_TOAST_ITEM, 1, 1)
+  ACTION_ITEMS(ACTION_INDEX) = ALERT_TOAST_TEXT
+
+End
+
+######################################################################################################
+#                     DEBUG
+######################################################################################################
+
+Subprog YAX3MOB_PRINT_MATRIX(YNAME, YMATRIX)
+  Value Char YNAME
+  Value Char YMATRIX()(,)
+
+  Local Integer XDIM : XDIM = func YUTILS.COUNT_MULTI(YMATRIX) - 1
+  Local Integer YDIM : YDIM = dim(YMATRIX,2)-1
+  Local Integer I, J
+
+  Gosub YALERTWSCONST
+
+  Local Char YFIL(250)
+  Local Char YNOW(50) : YNOW = ctrans(func YUTILS.YFORMATDATE(num$(datetime$),"DT"),":", "")
+  YFIL = filpath("tmp", "print_"+YNAME+"_"+YNOW, "txt")
+  Openo YFIL Using [YF]
+  Iomode adxium GUTF8 Using [YF]
+  Iomode adxirs chr$(13)+chr$(10) Using [YF]
+  Wrseq "xdim = " - num$(XDIM)- "ydim = "-num$(dim(YMATRIX,2)) Using [YF]
+
+  For I = 0 To XDIM
+    Wrseq "New item:"  Using [YF]
+    For J = 0 To YDIM
+      Wrseq num$(I) + "," + num$(J) - "-" - YACTIONSCONST(J) + ":" - YMATRIX(I,J) Using [YF]
+    Next J
+  Next
+  Openo Using [YF]
+
+End

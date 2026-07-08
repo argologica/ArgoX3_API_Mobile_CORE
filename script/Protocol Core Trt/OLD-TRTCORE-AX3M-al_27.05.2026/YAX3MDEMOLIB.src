@@ -1,0 +1,50 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+Subprog YSAVEINFO(YNAME, YTEL, YEMAIL, YINTEREST, YRECONTACT, YPRIVACY, YRESPONSE)
+  Value Char YNAME
+  Value Char YTEL
+  Value Char YEMAIL
+  Value Char YINTEREST
+  Value Integer YRECONTACT
+  Value Integer YPRIVACY
+
+  Variable Clbfile YRESPONSE
+
+  # campi record
+  Local File YAX3MDEMOINF [YAX3MDI]
+
+  Local Integer RESP_COUNT
+  Local Clbfile RESPONSE_FIELDS(1)(0..)
+
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  # Inizia transazione sulla tabella demo info
+  Trbegin [YAX3MDI]
+
+  # imposta i campi (attenzione ai nomi dei campi sulla tabella: adattare se differiscono)
+  [YAX3MDI]NAME = YNAME
+  [YAX3MDI]TEL = YTEL
+  [YAX3MDI]EMAIL = YEMAIL
+  [YAX3MDI]INTEREST = YINTEREST
+  [YAX3MDI]RECONTACT = YRECONTACT
+  [YAX3MDI]PRIVACY = YPRIVACY
+
+  Write [YAX3MDI]
+
+  If fstat = 0
+    Commit
+
+    # Costruisco manualmente l'array di campi per la risposta JSON
+    RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_INT("statusCode", SUCCESS, 1) : RESP_COUNT += 1
+    RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_STR("message", "Info demo salvate correttamente", 1) : RESP_COUNT += 1
+
+    YRESPONSE = func YJSONSERIALIZE.GET_CLBOBJ(AVOID.ACHAR, RESPONSE_FIELDS, 1, 1)
+  Else
+    Rollback
+
+    RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_INT("statusCode", INTERNAL_SERVER_ERROR, 1) : RESP_COUNT += 1
+    RESPONSE_FIELDS(RESP_COUNT) = func YJSONSERIALIZE.GET_STR("message", "Errore durante il salvataggio demo", 1) : RESP_COUNT += 1
+
+    YRESPONSE = func YJSONSERIALIZE.GET_CLBOBJ(AVOID.ACHAR, RESPONSE_FIELDS, 1, 1)
+  Endif
+
+End

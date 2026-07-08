@@ -1,0 +1,795 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+################################################################################
+# Subprog: YGET_MENU_FOR_USER
+# Input:
+#   - YUSERNAME (app username)  (Value Char)
+# Output:
+#   - YRESPONSE (clobfile) JSON compatibile con il formato di GetMenuItems()
+#
+# Logica:
+#   1) trova mappatura locale YAX3MUSER -> X3USERNAME (campo X3USERNAME / CODUSR)
+#   2) legge AUTILIS per CODUSR -> PRFFCT
+#   3) legge AFCTFCT per PRFCOD: se ALLFCT = 1 => tutte le funzioni abilitate
+#      altrimenti legge AFCTPRF per PRFCOD e costruisce lista FUNCTIONS[] con FNC
+#   4) confronta lista FUNCTIONS con la mappatura menu->FNC definita in questo subprog
+#   5) costruisce il JSON nel formato:
+#     {
+#       "YSMR": { "Controller": "...", "Title":"...", "SubItemsTitle": [ ... ] },
+#       "YSMO": { ... }
+#     }
+################################################################################
+
+Subprog YGETMENU(YUSERNAME,YRESPONSE)
+
+  Value Char YUSERNAME
+  Variable Clbfile YRESPONSE
+
+  Call OUVRE_TRACE("YGETMENU") From LECFIC
+  Local Char AX3M_ATABDIV(4) : AX3M_ATABDIV = func AFNC.PARAM("YTDMENAX3M", "")
+  #AX3M_ATABDIV = '6002' #(PRIMA)
+
+  Local File ATABDIV [F:YADI]
+
+  Call ECR_TRACE("Valore parametro Tab diversa ="-AX3M_ATABDIV,0) From GESECRAN
+
+  Filter [F:YADI] Where [F:YADI]NUMTAB = val(AX3M_ATABDIV)
+  Read [F:YADI] First
+
+  #Qui capisco se sono in una Gestione Ad albero o Flat
+  If([F:YADI]N2>0 & [F:YADI]N3>0)
+    Call ECR_TRACE("Menù ad albero",0) From GESECRAN
+    Call YGETMENU_TREE(YUSERNAME,AX3M_ATABDIV,YRESPONSE)
+  Else
+    Call ECR_TRACE("Menù flat",0) From GESECRAN
+    Call YGETMENU_FLAT(YUSERNAME,AX3M_ATABDIV,YRESPONSE)
+  Endif
+
+  Call FERME_TRACE From LECFIC
+End
+
+###################################################
+#**
+#* Gestione Menù ad albero [PRIVATE]
+#*
+#* @param YUSERNAME     Username
+#* @param AX3M_ATABDIV  Codice Tab div utilizzata per menù funzioni
+#* @param YRESPONSE     Risposta (payload)
+#*!
+
+Subprog YGETMENU_TREE(YUSERNAME,AX3M_ATABDIV,YRESPONSE)
+
+  Value Char YUSERNAME
+  Value Char AX3M_ATABDIV
+  Variable Clbfile YRESPONSE
+
+  Call ECR_TRACE("Nuova gestione: gestione del menu ad albero",0) From GESECRAN
+
+  #Tabelle utilizzate
+  Local File AUTILIS [AUS], YAX3MUSER [YAX3MU], ATABDIV [ADI], ATEXTRA [AXX], AFCTFCT [AFT], AFCTPRF [AFP] #CANC?
+
+  #Local vars
+  Local Integer YSTATUSRESP: YSTATUSRESP = 0  #0: VUOTO; 1: FILTERED, 2: FULL
+  Local Integer YSUCCESS,YSTATUS_CODE: YSUCCESS =1
+  Local Char YMESSAGE(250)
+  Local Char X3USERNAME(5),YPRFCOD(5)
+  Local Clbfile YTREE_MENU(5)
+  Local Clbfile YRESULT(5)
+
+  Call ECR_TRACE("[TREE]- Valore parametro Tab diversa ="-AX3M_ATABDIV,0) From GESECRAN
+
+  #1-Gestione condizionata di success/statusCode/message/result in base a Utente
+  If(vireblc(YUSERNAME,4)<> AVOID.ACHAR)
+    #Qui estrapolo il PROFILO FUNZIONE e il tipo di Risposta(Filtrata/Full)
+    Call ECR_TRACE("YHANDLE_PRFCOD",0) From GESECRAN
+    Call YHANDLE_PRFCOD(YUSERNAME,YPRFCOD,YSTATUSRESP)
+  Else
+    YSTATUSRESP = 2
+    YPRFCOD = AVOID.ACHAR
+  Endif
+
+  Call ECR_TRACE("# Username :"-YUSERNAME-"- # PROFILO FUNZIONE:"-YPRFCOD-"- # Status Response ="-num$(YSTATUSRESP),0) From GESECRAN
+
+  #If(YSTATUSRESP >0 & YPRFCOD <> AVOID.ACHAR)
+  If(YSTATUSRESP >0 | YPRFCOD <> AVOID.ACHAR)
+    Call ECR_TRACE("Gestione payload Menù funzioni",0) From GESECRAN
+
+    YSUCCESS = 1
+    #qui creo il body(struttura a menu):YRESULT
+    Call YGETTREE_MENU(YTREE_MENU,AX3M_ATABDIV,YSTATUSRESP,YPRFCOD) From YEXE2  #?-MODIFICA
+
+    #Append YRESULT, func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+    Append YRESULT, unescJson(YTREE_MENU) #YTREE_MENU  # qui va l'albero ricorsivo       # body (da mettere entro le { ... }
+
+    #compongo YRESPONSE
+    Append YRESPONSE, func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+    Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 200, 0)
+    Append YRESPONSE,YRESULT
+
+#Call ECR_TRACE("yresp:"-YRESPONSE,0) From GESECRAN
+    Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+  Else
+    Call ECR_TRACE("Gestione Errore: Nessuna funzione AX3M abilitata o nessun Pr.Funzione associato",0) From GESECRAN
+
+    #YRESPONSE:
+    Append YRESPONSE, func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+    Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 404, 0)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non presente in Anagrafica ArgoX3Mobile!!", 1)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+  Endif
+
+  #LOG(PAYLOAD)
+  Gosub YPRINT
+
+End
+
+#####################################################################################
+#**
+#* Metodo per Gestione Profilo Funzione [PRIVATE]
+#*
+#* @param YUSERNAME     Username
+#* @param YPRFCOD       Profilo funzione
+#* @param YSTATUSRESP   StatusResp (empty/filtered/full)
+#*!
+
+Subprog YHANDLE_PRFCOD(YUSERNAME,YPRFCOD,YSTATUSRESP)
+
+  Value Char YUSERNAME
+  Variable Char YPRFCOD
+  Variable Integer YSTATUSRESP
+
+  Local File AUTILIS [AUS], YAX3MUSER [YAX3MU], ATABDIV [ADI], ATEXTRA [AXX], AFCTFCT [AFT], AFCTPRF [AFP]
+
+  Columns [YAX3MU] (X3USERNAME)
+  #Inizio elaborazione
+  Read [YAX3MU]YAX3MU0 = YUSERNAME
+  If fstat = 0
+    Columns [AUS] (PRFFCT)
+    Read [AUS]CODUSR = [F:YAX3MU]X3USERNAME
+    If fstat = 0
+      YPRFCOD = vireblc([AUS]PRFFCT,4)  #profilo funzione
+       If YPRFCOD <> AVOID.ACHAR
+        Columns [AFT] (ALLFCT)
+        Read [AFT]AFT0=YPRFCOD
+        If fstat = 0
+          If([AFT]ALLFCT = 2)
+            YSTATUSRESP =2
+          Else
+            YSTATUSRESP =1
+          Endif
+        Endif
+       Endif
+    Endif
+  Endif
+End
+
+#####################################################################################
+#**
+#* Gestione per la composizione del Payload del MENU AD ALBERO
+#*
+#* @param YTREE_MENU     Payload
+#* @param AX3M_ATABDIV   Codice -Indice TAB Diversa con gestione Menù ad albero
+#* @param YSTATUSRESP    Stato di filtraggio (da Cod Profilo funzione)
+#* @param YPRFCOD        Codice profilo funzione
+#*!
+
+Subprog YGETTREE_MENU(YTREE_MENU,AX3M_ATABDIV,YSTATUSRESP,YPRFCOD)
+
+  Variable Clbfile YTREE_MENU
+  Value Char AX3M_ATABDIV
+  Value Integer YSTATUSRESP
+  Value Char YPRFCOD
+
+  Local File YVCONTROLLER [YYVCNTRL]
+  Local Integer MAX_NODES: MAX_NODES = 100
+
+  #Struttura dati in-memory: array paralleli
+
+  Local Char NODES_CODE(50)(MAX_NODES)    # ID-nodo
+  Local Char NODES_LABEL(250)(MAX_NODES)  # Label_nodo
+  Local Char NODES_CTRL(50)(MAX_NODES)    # A1: Controller
+  Local Char NODES_PARENT(50)(MAX_NODES)  # A2:
+  Local Char NODES_ISGROUP(5)(MAX_NODES)  # N1=2 -> true (navbutton/gruppo)
+  Local Integer NODES_N2(MAX_NODES)       # N2: Treelevel
+  Local Integer NODES_N3(MAX_NODES)       # N3: Order
+
+  Local Integer NODES_CHOICES(MAX_NODES)  #nODI SELEZIONATI
+  Local Integer NODE_COUNT : NODE_COUNT = 0
+
+#debug
+Local Char YFILENAME(20):YFILENAME = "Nodes_List"
+Local Clbfile YPRINT_RESPONSE(3)
+
+  #1-Caricamneto Nodi FULL
+  Filter [YYVCNTRL] Where ([YYVCNTRL]NUMTAB = val(AX3M_ATABDIV) & [YYVCNTRL]ENAFLG = 2) Order By [YYVCNTRL]N4
+  For [YYVCNTRL]
+    Read [F:AXX]AXX0 = "ATABDIV";"LNGDES";"ITA";AX3M_ATABDIV;[YYVCNTRL]CODE
+
+    If fstat = 0
+      NODES_CODE(NODE_COUNT)    = [YYVCNTRL]CODE
+      NODES_LABEL(NODE_COUNT)   = [F:AXX]TEXTE
+      NODES_CTRL(NODE_COUNT)    = func YUTILS.STR_IIF(vireblc([YYVCNTRL]A1,4)=AVOID.ACHAR,"null",[YYVCNTRL]A1)
+      NODES_PARENT(NODE_COUNT)  = func YUTILS.STR_IIF(vireblc([YYVCNTRL]A2,4)=AVOID.ACHAR,"null",[YYVCNTRL]A2)
+      NODES_ISGROUP(NODE_COUNT) = func YUTILS.STR_IIF([YYVCNTRL]N1=2,"true","false")
+      NODES_N2(NODE_COUNT)      = [YYVCNTRL]N2
+      NODES_N3(NODE_COUNT)      = [YYVCNTRL]N3
+#debug
+Gosub YTRACE_NODES
+#
+      NODE_COUNT += 1
+    Endif
+  Next
+  Filter [YYVCNTRL]
+
+  If(YSTATUSRESP = 1)
+    #qui valorizzo  array :nodes_choice
+    Call YIS_FILTERED(val(AX3M_ATABDIV),YPRFCOD,NODES_CODE, NODES_LABEL, NODES_CTRL,NODES_PARENT, NODES_ISGROUP,NODES_N2, NODES_N3, NODES_CHOICES,NODE_COUNT)
+  Endif
+
+Gosub YPRINT_ARRAYS #CANC (DEBUG)
+If(YSTATUSRESP = 1)
+  Gosub YPRINT_CHOOSEN_NODES #CANC (DEBUG)
+Endif
+  #2- costruzione albero partendo dai nodi root (PARENT = "null")
+#  Call BUILD_TREE_JSON("null", NODES_CODE, NODES_LABEL, NODES_CTRL,NODES_PARENT, NODES_ISGROUP,
+#&                      NODES_N2, NODES_N3, NODE_COUNT, YTREE_MENU)
+
+  Call ECR_TRACE("BUILD_TREE_JSON_NEW- StatusResp :"- num$(YSTATUSRESP),0) From GESECRAN
+  Call BUILD_TREE_JSON_NEW("null", NODES_CODE, NODES_LABEL, NODES_CTRL,NODES_PARENT, NODES_ISGROUP,
+&                      NODES_N2, NODES_N3, NODES_CHOICES, NODE_COUNT,YSTATUSRESP,YTREE_MENU)
+End
+
+#####################################################################################
+#**
+#* Estrapolo i Nodi da visualizzare in base al Profilo Funzione
+#*
+#* @param YNUMTAB         Num tabella diversa
+#* @param YPRFCOD         Profilo Funzione
+#* @param NODES_CODES     Array Codici Nodi
+#* @param NODES_LABELS    Array Labels Nodi
+#* @param NODES_CTRLS     Array Controllers
+#* @param NODES_PARENTS   Array Parents
+#* @param NODES_ISGROUPS  isGroup
+#* @param NODES_N2S
+#* @param NODES_N3S
+#* @param NODES_CHOICES   Scelto (si/no)
+#* @param NODE_COUNT      Numero Nodi
+#*!
+
+Subprog YIS_FILTERED(YNUMTAB,YPRFCOD, NODES_CODES, NODES_LABELS, NODES_CTRLS,NODES_PARENTS, NODES_ISGROUPS,NODES_N2S, NODES_N3S, NODES_CHOICES,NODE_COUNT)
+
+  Value Integer YNUMTAB
+  Value Char YPRFCOD
+  Value Char NODES_CODES()()
+  Value Char NODES_LABELS()()
+  Value Char NODES_CTRLS()()
+  Value Char NODES_PARENTS()()
+  Value Char NODES_ISGROUPS()()
+  Value Integer NODES_N2S()
+  Value Integer NODES_N3S()
+  Variable Integer NODES_CHOICES()
+  Value Integer NODE_COUNT
+
+#  Local File YVCONTROLLER [YYVCNTRL]
+#  Local File AFCTPRF [YAFP]
+  Local File YVPFCONTR [YVPFCNTR]
+
+  Local Integer YN,YJ, YPIDX
+  Local Char YPARENT_CODES(50)(NODE_COUNT+2)  #array dei padri trovati
+
+#  Link [YYVCNTRL] With [YYVCNTRL]YVCNTRL0 = YNUMTAB;[YAFP]FNC
+#&               As  [LNK] Where ([YAFP]PRFCOD = YPRFCOD & [YYVCNTRL]N1 =1)
+#&               Order By [YYVCNTRL]N4
+#  Columns [LNK] ([YYVCNTRL]CODE,[YYVCNTRL]N1)
+
+  #segnalo le FUNZIONI presenti
+  #Filter [LNK] Where ([YAFP]PRFCOD = YPRFCOD & [YYVCNTRL]N1 =1)
+
+  #Filter [LNK]
+  Filter [YVPFCNTR] Where [YVPFCNTR]PRFCOD = YPRFCOD
+
+Call ECR_TRACE("ROWCOUNT ="-num$(rowcount([YVPFCNTR])),0) From GESECRAN
+
+  For [YVPFCNTR]
+    #Foglia (Nodo funzione)
+    YN = func YUTILS.FIND1D_ITEM(NODES_CODES,[YVPFCNTR]CODE)  #YN: idx posiz
+    NODES_CHOICES(YN) = 1
+    Call YFIND_PARENT([YVPFCNTR]CODE,NODES_CODES,NODES_PARENTS,YPARENT_CODES) #qui popolo l'array dei genitori associati alle funzioni trovate dal pr funz.
+  Next
+  #Filter [LNK]
+
+  #segnalo gli antenati associati
+  For YJ = 0 To func YUTILS.COUNT(YPARENT_CODES)-1
+    YPIDX = func YUTILS.FIND1D_ITEM(NODES_CODES,YPARENT_CODES(YJ))
+    NODES_CHOICES(YPIDX) = 1
+  Next
+End
+
+##########################################################
+#**
+#* Metodo per estrarre elenco dei Nodi-Genitore
+#*
+#* @param YCODE
+#* @param NODES_CODES
+#* @param NODES_PARENTS
+#* @param YMYPARENTS
+#*!
+
+Subprog YFIND_PARENT(YCODE,NODES_CODES,NODES_PARENTS,YMYPARENTS)
+
+  Value Char YCODE
+  Value Char NODES_CODES()()
+  Value Char NODES_PARENTS()()
+  Variable Char YMYPARENTS ()()
+
+  Local Char YPARENT_CODE(50)
+  Local Integer YI
+  YI = func YUTILS.FIND1D_ITEM(NODES_CODES,YCODE)
+  YPARENT_CODE = NODES_PARENTS(YI)#Trovo il codice Parent
+
+  If(YPARENT_CODE <> "null")
+    YP = func YUTILS.COUNT(YMYPARENTS)
+    YMYPARENTS(YP) = YPARENT_CODE
+    Call YFIND_PARENT(YPARENT_CODE,NODES_CODES,NODES_PARENTS,YMYPARENTS)
+  Else
+    #se nodo: radice
+    YP = func YUTILS.COUNT(YMYPARENTS)
+    YMYPARENTS(YP) = YCODE
+    End
+  Endif
+End
+
+#####################################################################################
+
+#**
+#* FUNZIONE RICORSIVA BUILD_TREE_JSON_new
+#*
+#* @param PARENT_ID Parent ID
+#* @param CODES     Array con i Codici di Nodi dell'Albero
+#* @param LABELS    Array con le Labels di Nodi dell'Albero
+#* @param CTRLS     Array con Controllers associati ai Nodi dell'Albero
+#* @param PARENTS   Array con Nodi-Padre associati ai Nodi dell'Albero
+#* @param ISGROUPS  Array di true(NavButton)/false(funzione =foglia)
+#* @param N2S       Array con i Livelli(nell'albero) dei Nodi
+#* @param N3S       Array con gli Indici di Ordine (a parità di livello) dei Nodi
+#* @param NODECOUNT Numero dei Nodi nell'albero
+#* @param RESULT    Sotto albero (struttura a json)
+#*!
+
+Subprog BUILD_TREE_JSON_NEW(PARENT_ID, CODES, LABELS, CTRLS, PARENTS,ISGROUPS, N2S, N3S, NODES_CHOICES, NODECOUNT,YSTATUSRESP ,RESULT)
+
+  Value Char PARENT_ID
+  Value Char CODES()()
+  Value Char LABELS()()
+  Value Char CTRLS()()
+  Value Char PARENTS()()
+  Value Char ISGROUPS()()
+  Value Integer N2S()
+  Value Integer N3S()
+  Value Integer NODES_CHOICES()
+  Value Integer NODECOUNT
+  Value Integer YSTATUSRESP
+  Variable Clbfile RESULT
+
+  Local Integer I, FIRST_CHILD : FIRST_CHILD = 1
+  Local Clbfile CHILDREN_JSON(6)
+
+  #Ciclo su tutti i NODI
+  For I = 0 To NODECOUNT - 1
+
+    If PARENTS(I) = PARENT_ID
+      If FIRST_CHILD = 0
+        Append CHILDREN_JSON, func GET_SEPARATOR()
+        #Append CHILDREN_JSON, func YJSONSERIALIZE.GET_SEPARATOR()  #utilizza questo! , ritorna: ,
+      Else
+        FIRST_CHILD = 0
+      Endif
+
+      #Costruisco:  "CODE": ["label", ctrl_or_null, isgroup, N1level, N3order, { ...figli... }]
+      #Local Clbfile YNODE_PROP(4)(5)
+      Local Char YNODE_PROP(250)(5)
+
+      #valorizzo l'array delle proprietà del nodo:
+      YNODE_PROP(0) = LABELS(I)     #label
+      YNODE_PROP(1) = CTRLS(I)      #controller
+      YNODE_PROP(2) = ISGROUPS(I)   #true/false
+      YNODE_PROP(3) = num$(N2S(I))  #treelevel
+      YNODE_PROP(4) = num$(N3S(I))  #Order
+      #YNODE_PROP(5) = num$(NODES_CHOICES(I))  #nodo scelto : 1: Si, 0: No
+
+      If(YSTATUSRESP = 2)
+        Gosub YGET_MENUBODY
+      Else
+        #prendo solo i nodi selezionati
+        If(NODES_CHOICES(I) = 1)
+          Call ECR_TRACE("Nodo scelto :"-CODES(I),0) From GESECRAN
+          Gosub YGET_MENUBODY
+        Endif
+      Endif
+    Endif
+  Next
+
+  RESULT = CHILDREN_JSON
+
+End
+
+#####################################################################################
+#**
+#* Body del menu ad albero
+#*!
+
+$YGET_MENUBODY
+
+  #gestione KEY: [TUPLA]
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_KEY(CODES(I))    #KEY :
+  #Append CHILDREN_JSON,":"
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_OPENSQUAREBRACKET()  #[
+
+  #1
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_STRVALUE(YNODE_PROP(0))
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_SEPARATOR()
+
+  #2 nullable
+  Append CHILDREN_JSON, func YUTILS.STR_IIF(YNODE_PROP(1)="null","null",func YJSONSERIALIZE.GET_STRVALUE(YNODE_PROP(1)))
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_SEPARATOR()
+
+  #2 bool
+  Append CHILDREN_JSON,YNODE_PROP(2)
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_SEPARATOR()
+
+  #3 int num$(YVALUE)
+  Append CHILDREN_JSON,num$(YNODE_PROP(3))
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_SEPARATOR()
+
+  #4 int
+  Append CHILDREN_JSON,num$(YNODE_PROP(4))
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_SEPARATOR()
+
+  #5
+  #Costruisco i figli ricorsivamente
+  Local Clbfile SUBTREE(3)
+  Call BUILD_TREE_JSON_NEW(CODES(I), CODES, LABELS, CTRLS, PARENTS, ISGROUPS, N2S, N3S,NODES_CHOICES,NODECOUNT,YSTATUSRESP,SUBTREE)
+
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+  Append CHILDREN_JSON,SUBTREE
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+  Append CHILDREN_JSON,func YJSONSERIALIZE.GET_CLOSESQUAREBRACKET()  #]
+
+Return
+
+#####################################################################################
+#Parte gestione FLAT
+#####################################################################################
+#**
+#* Metodo per Gestione Menù flat [PRIVATE] (old version)
+#*
+#* @param YUSERNAME
+#* @param AX3M_ATABDIV
+#* @param YRESPONSE
+#*!
+
+Subprog YGETMENU_FLAT(YUSERNAME,AX3M_ATABDIV,YRESPONSE)
+
+  Value Char YUSERNAME
+  Value Char AX3M_ATABDIV
+  Variable Clbfile YRESPONSE
+
+  Gosub GET_CONSTANTS From YUTILS
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  # local vars
+  Local Char X3USERNAME(5)
+ #Local Char AX3M_ATABDIV(4) : AX3M_ATABDIV = func AFNC.PARAM("YTDMENAX3M", "")  #ora passato come parametro
+  Local Char FUNCTION_ARRAY(250)(2)
+  Local Char FUNCTION_ID(50)
+  Local Char YPRFCOD(5)
+  Local Integer FIRST_ITEM : FIRST_ITEM = 1
+
+  Local Clbfile FUNCTION_JSON_ARRAY(1)
+  Local Clbfile MENU_ITEMS(1)
+
+  Call ECR_TRACE("[FLAT]- Valore parametro Tab diversa ="-AX3M_ATABDIV,0) From GESECRAN
+
+
+  Local File AUTILIS [AUS], YAX3MUSER [YAX3MU], ATABDIV [ADI], ATEXTRA [AXX], AFCTFCT [AFT], AFCTPRF [AFP]
+
+  YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+
+  If YUSERNAME = AVOID.ACHAR
+    Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 404, 0)
+    Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non presente in anagrafica ArgoX3 Mobile (vuoto)!", 1)
+  Else
+    Columns [YAX3MU] (X3USERNAME)
+    #Inizio elaborazione
+    Read [YAX3MU]YAX3MU0 = YUSERNAME
+
+    If fstat = 0
+
+      Columns [AUS] (PRFFCT)
+      Read [AUS]CODUSR = [F:YAX3MU]X3USERNAME
+
+      If fstat = 0
+        YPRFCOD = [AUS]PRFFCT
+
+        If vireblc(YPRFCOD, 2) <> AVOID.ACHAR
+
+          Columns [AFT] (ALLFCT)
+          Read [AFT]AFT0=YPRFCOD
+
+          If fstat = 0
+            If [AFT]ALLFCT = 2
+              Gosub GET_FULLRESPONSE
+            Else
+              Gosub GET_FILTEREDRESPONSE
+            Endif
+          Endif
+
+        Endif
+  #
+      Else
+#       #Utente non trovato su x3 (SBLOCCO TUTTE LE FUNZIONI FINCHE' NON C'è UN PROFILO)
+#       Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 404, 0)
+#       Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non presente in anagrafica X3!", 1)
+        Gosub GET_FULLRESPONSE
+      Endif
+    Else
+        # Utente non trovato su ax3m
+        Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 404, 0)
+        Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non presente in anagrafica ArgoX3 Mobile!", 1)
+    Endif
+  Endif
+
+  Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+  # --- scrittura su file come facevi prima ---
+Local Char YFILENAME_RESP(100) : YFILENAME_RESP = "menu_payload_" + format$("YYYYMMDDhhmmss", datetime$)
+Local Char YFILEPATH_RESP(250) : YFILEPATH_RESP = filpath("tmp", YFILENAME_RESP, "json")
+Openo YFILEPATH_RESP Using [YRESP]
+Iomode adxifs ";" Using [YRESP]
+Iomode adxium GUTF8 Using [YRESP]
+Iomode adxirs chr$(13)+chr$(10) Using [YRESP]
+Wrseq YRESPONSE Using [YRESP]
+Openo Using [YRESP]
+
+  #LOG
+  #Gosub YPRINT
+End
+
+################################################################################
+#Gestione old version: SOLO MENù FLAT
+################################################################################
+
+Subprog YGETMENU_OLD(YUSERNAME, YRESPONSE)
+  Value Char YUSERNAME
+  Variable Clbfile YRESPONSE
+
+  Gosub GET_CONSTANTS From YUTILS
+  Gosub GET_WS_CONSTANTS From YUTILS
+
+  # local vars
+  Local Char X3USERNAME(5)
+  Local Char AX3M_ATABDIV(4) : AX3M_ATABDIV = func AFNC.PARAM("YTDMENAX3M", "")
+  Local Char FUNCTION_ARRAY(250)(2)
+  Local Char FUNCTION_ID(50)
+  Local Char YPRFCOD(5)
+  Local Integer FIRST_ITEM : FIRST_ITEM = 1
+
+  Local Clbfile FUNCTION_JSON_ARRAY(1)
+  Local Clbfile MENU_ITEMS(1)
+
+  Local File AUTILIS [AUS], YAX3MUSER [YAX3MU], ATABDIV [ADI], ATEXTRA [AXX], AFCTFCT [AFT], AFCTPRF [AFP]
+
+  YRESPONSE = func YJSONSERIALIZE.GET_OPENCURLYBRACKET()
+
+  If YUSERNAME = AVOID.ACHAR
+    Gosub GET_FULLRESPONSE #RIMUOVERE QUANDO ANTONIO HA IMPLEMENTATO LA PARTE DI FRONTEND
+  Else
+    Columns [YAX3MU] (X3USERNAME)
+    #Inizio elaborazione
+    Read [YAX3MU]YAX3MU0 = YUSERNAME
+
+    If fstat = 0
+
+      Columns [AUS] (PRFFCT)
+      Read [AUS]CODUSR = [F:YAX3MU]X3USERNAME
+
+      If fstat = 0
+
+        YPRFCOD = [AUS]PRFFCT
+        If vireblc(YPRFCOD, 2) <> AVOID.ACHAR
+
+          Columns [AFT] (ALLFCT)
+          Read [AFT]AFT0=YPRFCOD
+
+          If fstat = 0
+            If [AFT]ALLFCT = 2
+              Gosub GET_FULLRESPONSE
+            Else
+              Gosub GET_FILTEREDRESPONSE
+            Endif
+          Endif
+
+        Endif
+  #
+      Else
+#       #Utente non trovato su x3 (SBLOCCO TUTTE LE FUNZIONI FINCHE' NON C'è UN PROFILO)
+#       Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 404, 0)
+#       Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non presente in anagrafica X3!", 1)
+        Gosub GET_FULLRESPONSE
+      Endif
+    Else
+        # Utente non trovato su ax3m
+        Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 404, 0)
+        Append YRESPONSE, func YJSONSERIALIZE.GET_STR("message", "Utente non presente in anagrafica ArgoX3 Mobile!", 1)
+    Endif
+  Endif
+
+  Append YRESPONSE, func YJSONSERIALIZE.GET_CLOSECURLYBRACKET()
+
+  # --- scrittura su file come facevi prima ---
+#Local Char YFILENAME_RESP(100) : YFILENAME_RESP = "menu_payload_" + format$("YYYYMMDDhhmmss", datetime$)
+#Local Char YFILEPATH_RESP(250) : YFILEPATH_RESP = filpath("tmp", YFILENAME_RESP, "json")
+#Openo YFILEPATH_RESP Using [YRESP]
+#Iomode adxifs ";" Using [YRESP]
+#Iomode adxium GUTF8 Using [YRESP]
+#Iomode adxirs chr$(13)+chr$(10) Using [YRESP]
+#Wrseq YRESPONSE Using [YRESP]
+#Openo Using [YRESP]
+
+Call FERME_TRACE From LECFIC
+
+End
+
+################################################################################
+$GET_FILTEREDRESPONSE
+
+  Columns [ADI] (CODE, A1, ENAFLG)
+  Link [AFP] With  [AFT]AFT0 ~= [AFP]PRFCOD,
+&                  [ADI]CODE ~= AX3M_ATABDIV;[AFP]FNC
+&            As    [FCTLNK]
+&            Where ([AFP]PRFCOD = YPRFCOD & [ADI]ENAFLG = 2)
+&            Order By [ADI]N1
+
+  For [FCTLNK]
+    Gosub BUILD_MENUITEM
+  Next
+
+  Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 200, 0)
+  Append YRESPONSE, MENU_ITEMS
+
+Return
+
+################################################################################
+
+$GET_FULLRESPONSE
+
+  # Tabella diversa per reperire i controller da interrogare su ArgoX3 API
+  # Se la lettura fallisce non ho gestito i controller per l'api associata alle funzioni su mobile
+  #Readlock [AXX]AXX0='ATABDIV';'LNGDES';GLANGUE;AX3M_ATABDIV_CONTROLLERS;[AFC]CODINT
+
+  #prendo le funzioni associate al N°TabellaController, Attive(ENAFLG = 2)
+  # e ordinate secondo N1 (ordinamento da avere nel MenuController)
+
+  Columns [ADI] (CODE, A1, ENAFLG)
+  Filter [ADI] Where ([ADI]NUMTAB = val(AX3M_ATABDIV) & [ADI]ENAFLG = 2) Order By N1
+  For [ADI]
+    Gosub BUILD_MENUITEM
+  Next
+
+  Filter [ADI]
+
+  # Costruiamo la risposta finale
+  Append YRESPONSE, func YJSONSERIALIZE.GET_INT("statusCode", 200, 0)
+  Append YRESPONSE, MENU_ITEMS
+
+Return
+
+################################################################################
+
+$BUILD_MENUITEM
+
+  If FIRST_ITEM = 0
+    Append MENU_ITEMS, func YJSONSERIALIZE.GET_SEPARATOR()
+  Else
+    FIRST_ITEM = 0
+  Endif
+
+  # Creiamo l'array per questa funzione [descrizione, identificativo]
+  FUNCTION_ID = [ADI]CODE  # Questo dovrebbe essere YSMR, YSMO, ecc.
+  Read [F:AXX]AXX0 = "ATABDIV";"LNGDES";"ITA";AX3M_ATABDIV;FUNCTION_ID
+  If fstat = 0
+    FUNCTION_ARRAY(0) = [F:AXX]TEXTE    #descrizione
+    FUNCTION_ARRAY(1) = [ADI]A1         #controller
+    FUNCTION_JSON_ARRAY = func YJSONSERIALIZE.GET_STRLST(FUNCTION_ID, FUNCTION_ARRAY, 1)
+    Append MENU_ITEMS, FUNCTION_JSON_ARRAY
+  Endif
+
+Return
+
+#############################################################################################################
+#                                             UTILITà - DEBUG
+#############################################################################################################
+#**
+#* Subroutine richiamata per stampare il payload del MENU
+#*!
+
+$YPRINT
+
+  Local Char YFILENAME_RESP(100) : YFILENAME_RESP = "MenuPayload"+"_" + format$("YYYYMMDDhhmmss", datetime$)
+  Local Char YFILEPATH_RESP(250) : YFILEPATH_RESP = filpath("tmp", YFILENAME_RESP, "json")
+  Openo YFILEPATH_RESP Using [YRESP]
+  Iomode adxifs ";" Using [YRESP]
+  Iomode adxium GUTF8 Using [YRESP]
+  Iomode adxirs chr$(13)+chr$(10) Using [YRESP]
+  Wrseq YRESPONSE Using [YRESP]
+  Openo Using [YRESP]
+
+Return
+
+############################################################################
+#**
+#*[DEBUG-YAX3MENULIB] - Scrittura proprietà di ciascun Nodo (DEBUG)
+#*!
+
+$YTRACE_NODES
+
+  Append YPRINT_RESPONSE,"ID-Nodo:"-num$(NODE_COUNT)+"["+chr$(10)+
+&        "CODE:"-NODES_CODE(NODE_COUNT)+chr$(10)+
+&        "LABEL:"-NODES_LABEL(NODE_COUNT)+chr$(10)+
+&        "CONTROLLER:"-NODES_CTRL(NODE_COUNT)+chr$(10)+
+&        "PARENT-NODE:"-NODES_PARENT(NODE_COUNT)+chr$(10)+
+&        "IsGROUP:"-NODES_ISGROUP(NODE_COUNT)+chr$(10)+
+&        "TREE_LEVEL:"-num$(NODES_N2(NODE_COUNT))+chr$(10)+
+&        "ORDER(level):"-num$(NODES_N3(NODE_COUNT))+chr$(10)+"]"+chr$(10)
+
+Return
+
+##############################################################################à
+#**
+#* [DEBUG-YAX3MENULIB] - Sub per stampare i nodi scelti/filtrati (nel caso Modalità(YSTATUSRESP =1): filtered
+#*!
+
+$YPRINT_CHOOSEN_NODES
+
+  Local Integer YZ
+  Local Char YCHOO(250)
+
+  For YZ=0 To NODE_COUNT -1
+    If(NODES_CHOICES(YZ)= 1)
+      YCHOO -=  NODES_CODE(YZ)+"-"
+    Endif
+  Next
+  Call ECR_TRACE("scelti:"-YCHOO,0) From GESECRAN
+
+Return
+
+######################################################################
+#**
+#* [DEBUG-YAX3MENULIB] - Stampa degli array Nodo
+#*!
+
+$YPRINT_ARRAYS
+
+  Local Char YFILENAME_RESP(100) : YFILENAME_RESP = YFILENAME+"_" + format$("YYYYMMDDhhmmss", datetime$)
+  Local Char YFILEPATH_RESP(250) : YFILEPATH_RESP = filpath("tmp", YFILENAME_RESP, "json")
+  Openo YFILEPATH_RESP Using [YRESP]
+  Iomode adxifs ";" Using [YRESP]
+  Iomode adxium GUTF8 Using [YRESP]
+  Iomode adxirs chr$(13)+chr$(10) Using [YRESP]
+  Wrseq YPRINT_RESPONSE Using [YRESP]
+  Openo Using [YRESP]
+
+Return
+
+######################################################################
+######################################################################
+#da cancellare (utilizza jsonserialize)
+
+#**
+#* Ritorna il separatore
+#*!
+
+Funprog GET_SEPARATOR()
+  Local Char YSEP(1): YSEP = ","
+End YSEP
